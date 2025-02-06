@@ -1,79 +1,150 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Echoel - Künstler und Musiker</title>
-  <meta name="description" content="Echoel ist ein Künstler und Musiker aus Hamburg. Erfahre mehr über seine Musik, seine Installationen und seine Software Echoel Studio.">
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echoel - Künstler, Musiker & Entwickler aus Hamburg</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Echoel - Hamburger Künstler und Entwickler des Echoel Studios. Entdecken Sie innovative Musik, immersive Installationen und kreative Software-Lösungen.">
+    <meta name="keywords" content="Echoel, Musik, Installationen, Software, Hamburg, Echoel Studio, Künstler">
+    <meta name="author" content="Michael Terbuyken">
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Echoel - Künstler & Entwickler">
+    <meta property="og:description" content="Innovative Musik, immersive Installationen und kreative Software-Lösungen aus Hamburg.">
+    <meta property="og:url" content="https://echoel.de">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Preload wichtiger Ressourcen -->
+    <link rel="preconnect" href="https://formspree.io">
 </head>
 <body>
-  <header>
-    <h1>Echoel</h1>
-    <nav>
-      <ul>
-        <li><a href="#musik">Musik</a></li>
-        <li><a href="#installationen">Installationen</a></li>
-        <li><a href="#software">Software</a></li>
-        <li><a href="#kontakt">Kontakt</a></li>
-        <li><a href="#impressum">Impressum</a></li>
-      </ul>
-    </nav>
-  </header>
-  <main>
-    <section id="musik">
-      <h2>Musik</h2>
-      <p>
-        Als vielseitiger Musiker erforsche ich verschiedene Genres und Ausdrucksformen.
-        Von treibenden Techno-Sets unter meinem eigenen Namen Echoel bis hin zu experimentellen
-        elektronischen Klanglandschaften
-      
-      </p>
-      <p>
-        Gemeinsam mit <a href="https://www.instagram.com/anna.elisie/" target="_blank">Anna.elisie</a> verwirkliche ich das Musik- und Kunstprojekt <a href="https://www.instagram.com/loewe.immerlieb/" target="_blank">Löwe Immerlieb</a>.
-        <ahref="https://www.instagram.com/xt14_artist/" target="_blank">XT 14</a> ist ein Projekt wo ich die Produktionen untertütze.
-        Mit dem <a href="https://www.instagram.com/tropicaldrones/" target="_blank">Tropical Drones</a> Kollektiv arbeiten wir an <a href="https://www.instagram.com/nia9ara.de/" target="_blank">Nia9ara</a> <a href="https://www.instagram.com/supernaturalhealingkillers/" target="_blank">Super Natural Healing Killers</a> und <a href="https://www.instagram.com/digitalewaerme/" target="_blank">Digitale Wärme</a>. Wir experimentieren mit elektronischen Klängen, spielen live und und
-        veröffentlichen unsere Musik. 
-      </p>
-    </section>
-    <section id="installationen">
-      <h2>Installationen</h2>
-      <p>
-        Immersive Installationen und Performances, die hörbares in den sichtabren und fühhlbaren bereich erweitern.
-        Meine charakteristischen Wasser-Sound-Licht-Installationen bieten eine einzigartige
-        Sinnesreise, die Klang in visuelle und taktile Formen übersetzt.
-      </p>
-    </section>
-    <section id="software">
-      <h2>Echoel Studio</h2>
-      <p>
-        Echoel Studio ist ein fortschrittliches Audio-Video-Kompositionstool, das als
-        Plugin und Standalone-Anwendung verfügbar ist. Es bietet eine einzigartige
-        Kombination aus 3D-Audio- und Videokartierung mit Biofeedback-Funktionen und
-        ermöglicht es Künstlern, immersive und interaktive Erlebnisse zu schaffen.
-      </p>
-      <a href="https://github.com/vibrationalforce/echoel-studio/" class="button">Download</a>
-      <a href="https://paypal.me/echoel" class="button">Spende</a>
-    </section>
-    <section id="kontakt">
-      <h2>Kontakt</h2>
-      <p>Hast du Fragen? Dann kontaktiere mich jetzt!</p>
-      <form action="https://formspree.io/f/xeqwopvd" method="post">
-        <label for="name">Name:</label>
-        <input type="text" id="name" name="name" required>
-        <label for="email">E-Mail:</label>
-        <input type="email" id="email" name="email" required>
-        <button type="submit">Senden</button>
-      </form>
-    </section>
-    <section id="impressum">
-      <h2>Impressum</h2>
-      <p>Michael Terbuyken<br>Bahrenfelder Chaussee 35<br>22761 Hamburg</p>
-    </section>
-  </main>
-  <footer>
-    <p>&copy; 2025 Echoel</p>
-  </footer>
-  <script src="script.js"></script>
+    <header class="site-header">
+        <div class="container">
+            <h1>Echoel</h1>
+            <nav aria-label="Hauptnavigation">
+                <button class="mobile-menu-toggle" aria-label="Menü öffnen" aria-expanded="false">
+                    <span class="hamburger"></span>
+                </button>
+                <ul class="nav-list">
+                    <li><a href="#musik" class="nav-link">Musik</a></li>
+                    <li><a href="#installationen" class="nav-link">Installationen</a></li>
+                    <li><a href="#software" class="nav-link">Software</a></li>
+                    <li><a href="#kontakt" class="nav-link">Kontakt</a></li>
+                    <li><a href="#impressum" class="nav-link">Impressum</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section id="musik" class="section">
+            <div class="container">
+                <h2>Musik</h2>
+                <article>
+                    <p>Als vielseitiger Musiker erforsche ich verschiedene Genres und Ausdrucksformen. 
+                    Von treibenden Techno-Sets unter meinem eigenen Namen Echoel bis hin zu experimentellen 
+                    elektronischen Klanglandschaften.</p>
+                    
+                    <div class="collaborations">
+                        <h3>Kollaborationen</h3>
+                        <ul class="projects-list">
+                            <li><a href="https://www.instagram.com/loewe.immerlieb/" target="_blank" rel="noopener noreferrer">Löwe Immerlieb</a> (mit <a href="https://www.instagram.com/anna.elisie/" target="_blank" rel="noopener noreferrer">Anna.elisie</a>)</li>
+                            <li><a href="https://www.instagram.com/xt14_artist/" target="_blank" rel="noopener noreferrer">XT 14</a> (Produktionsunterstützung)</li>
+                            <li>Tropical Drones Kollektiv Projekte:
+                                <ul>
+                                    <li><a href="https://www.instagram.com/nia9ara.de/" target="_blank" rel="noopener noreferrer">Nia9ara</a></li>
+                                    <li><a href="https://www.instagram.com/supernaturalhealingkillers/" target="_blank" rel="noopener noreferrer">Super Natural Healing Killers</a></li>
+                                    <li><a href="https://www.instagram.com/digitalewaerme/" target="_blank" rel="noopener noreferrer">Digitale Wärme</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section id="installationen" class="section">
+            <div class="container">
+                <h2>Installationen</h2>
+                <article>
+                    <p>Immersive Installationen und Performances, die Hörbares in den sichtbaren und fühlbaren 
+                    Bereich erweitern. Meine charakteristischen Wasser-Sound-Licht-Installationen bieten eine 
+                    einzigartige Sinnesreise, die Klang in visuelle und taktile Formen übersetzt.</p>
+                </article>
+            </div>
+        </section>
+
+        <section id="software" class="section">
+            <div class="container">
+                <h2>Echoel Studio</h2>
+                <article>
+                    <p>Echoel Studio ist ein fortschrittliches Audio-Video-Kompositionstool, das als 
+                    Plugin und Standalone-Anwendung verfügbar ist. Es bietet eine einzigartige 
+                    Kombination aus 3D-Audio- und Videokartierung mit Biofeedback-Funktionen und 
+                    ermöglicht es Künstlern, immersive und interaktive Erlebnisse zu schaffen.</p>
+                    
+                    <div class="button-group">
+                        <a href="https://github.com/vibrationalforce/echoel-studio/" class="button" target="_blank" rel="noopener noreferrer">
+                            <span class="icon">📥</span>Download
+                        </a>
+                        <a href="https://paypal.me/echoel" class="button" target="_blank" rel="noopener noreferrer">
+                            <span class="icon">❤️</span>Spenden
+                        </a>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section id="kontakt" class="section">
+            <div class="container">
+                <h2>Kontakt</h2>
+                <p>Hast du Fragen? Dann kontaktiere mich jetzt!</p>
+                <form id="kontakt-form" action="https://formspree.io/f/xeqwopvd" method="post" class="contact-form">
+                    <div class="form-group">
+                        <label for="name">Name:</label>
+                        <input type="text" id="name" name="name" required 
+                               aria-required="true" autocomplete="name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">E-Mail:</label>
+                        <input type="email" id="email" name="email" required 
+                               aria-required="true" autocomplete="email">
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="submit" class="button">Senden</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <section id="impressum" class="section">
+            <div class="container">
+                <h2>Impressum</h2>
+                <address>
+                    Michael Terbuyken<br>
+                    Bahrenfelder Chaussee 35<br>
+                    22761 Hamburg
+                </address>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <p>&copy; 2025 Echoel. Alle Rechte vorbehalten.</p>
+        </div>
+    </footer>
+
+    <script src="script.js" defer></script>
 </body>
 </html>
