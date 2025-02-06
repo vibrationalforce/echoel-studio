@@ -1,8 +1,8 @@
 /* Farbpalette */:root {
   --primary-color: #222; /* Dunkelgrau */
   --secondary-color: #f8f8f8; /* Hellgrau */
-  --accent-color: #ff6600; /* Orange */
-  --button-hover-color: #ff4500; /* Dunkleres Orange */
+  --accent-color: #333; /* Schwarz */
+  --button-hover-color: #111; /* Dunkleres Schwarz */
 }
 
 body {
