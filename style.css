@@ -2,6 +2,7 @@
   --primary-color: #222; /* Dunkelgrau */
   --secondary-color: #f8f8f8; /* Hellgrau */
   --accent-color: #ff6600; /* Orange */
+  --button-hover-color: #ff4500; /* Dunkleres Orange */
 }
 
 body {
@@ -10,6 +11,7 @@ body {
   padding: 0;
   background-color: var(--secondary-color);
   color: var(--primary-color);
+  line-height: 1.6;
 }
 
 header {
@@ -21,7 +23,7 @@ header {
 
 h1 {
   margin: 0;
-  font-size: 2em;
+  font-size: 2.5em;
 }
 
 nav ul {
@@ -39,6 +41,12 @@ nav li {
 nav a {
   color: #fff;
   text-decoration: none;
+  font-weight: bold;
+  transition: color 0.3s ease;
+}
+
+nav a:hover {
+  color: var(--accent-color);
 }
 
 main {
@@ -46,11 +54,12 @@ main {
 }
 
 section {
-  margin-bottom: 20px;
+  margin-bottom: 40px;
 }
 
 h2 {
-  font-size: 1.5em;
+  font-size: 2em;
+  margin-bottom: 10px;
 }.projekte {
   display: flex;
   flex-wrap: wrap;
@@ -62,9 +71,12 @@ h2 {
   background-color: #fff;
   border-radius: 5px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}.projekt:hover {
+  transform: translateY(-5px);
 }.projekt h3 {
   margin-top: 0;
-  font-size: 1.2em;
+  font-size: 1.4em;
 }.button {
   display: inline-block;
   padding: 10px 20px;
@@ -72,6 +84,10 @@ h2 {
   color: #fff;
   text-decoration: none;
   border-radius: 5px;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}.button:hover {
+  background-color: var(--button-hover-color);
 }
 
 footer {
