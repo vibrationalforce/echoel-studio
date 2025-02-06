@@ -1,12 +1,82 @@
-/* Responsive Design */
+/* Farbpalette */:root {
+  --primary-color: #222; /* Dunkelgrau */
+  --secondary-color: #f8f8f8; /* Hellgrau */
+  --accent-color: #ff6600; /* Orange */
+}
+
 body {
-  max-width: 960px;
-  margin: 0 auto;
+  font-family: 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: var(--secondary-color);
+  color: var(--primary-color);
+}
+
+header {
+  background-color: var(--primary-color);
+  color: #fff;
+  padding: 20px;
+  text-align: center;
+}
+
+h1 {
+  margin: 0;
+  font-size: 2em;
+}
+
+nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+
+nav li {
+  display: inline-block;
+  margin: 0 10px;
+}
+
+nav a {
+  color: #fff;
+  text-decoration: none;
+}
+
+main {
   padding: 20px;
 }
 
-/* Optimierte Bilder */
-img {
-  max-width: 100%;
-  height: auto;
+section {
+  margin-bottom: 20px;
+}
+
+h2 {
+  font-size: 1.5em;
+}.projekte {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}.projekt {
+  width: 48%;
+  margin-bottom: 20px;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}.projekt h3 {
+  margin-top: 0;
+  font-size: 1.2em;
+}.button {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: var(--accent-color);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 5px;
+}
+
+footer {
+  background-color: var(--primary-color);
+  color: #fff;
+  padding: 20px;
+  text-align: center;
 }
