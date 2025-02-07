@@ -140,6 +140,10 @@ footer {
   padding: 10px 15px;
   border: none;
   cursor: pointer;
+}
+
+.download-button-container {
+  text-align: center; /* Center the button within its container */
   margin-top: 20px;
 }
 
