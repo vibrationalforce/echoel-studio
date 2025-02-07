@@ -1,122 +1,132 @@
 /* Basic Styles */
 :root {
-    --primary-color: #222;
-    --secondary-color: #f8f8f8;
-    --text-color: #333;
+  --primary-color: #222;
+  --secondary-color: #f8f8f8;
+  --text-color: #333;
 }
 
 body {
-    font-family: sans-serif;
-    margin: 0;
-    background-color: var(--secondary-color);
-    color: var(--text-color);
+  font-family: sans-serif;
+  margin: 0;
+  background-color: var(--secondary-color);
+  color: var(--text-color);
 }
 
 .container {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 20px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
 }
 
 header {
-    background-color: var(--primary-color);
-    color: #fff;
-    padding: 10px 0;
-    text-align: center;
+  background-color: var(--primary-color);
+  color: #fff;
+  padding: 10px 0;
+  text-align: center;
 }
 
 nav ul {
-    list-style: none;
-    padding: 0;
+  list-style: none;
+  padding: 0;
 }
 
 nav li {
-    display: inline;
-    margin: 0 10px;
+  display: inline;
+  margin: 0 10px;
 }
 
 nav a {
-    color: #fff;
-    text-decoration: none;
+  color: #fff;
+  text-decoration: none;
 }
 
 section {
-    padding: 40px 0;
+  padding: 40px 0;
 }
 
-h2 {
-    font-size: 2em;
-    margin-bottom: 20px;
+h1, h2 {
+  font-size: 2em;
+  margin-bottom: 20px;
 }
 
 /* Studio-Specific Styles */
 #studio {
-    text-align: center;
+  text-align: center;
 }
 
 #studio img {
-    max-width: 80%;
-    margin-top: 20px;
+  max-width: 80%;
+  margin-top: 20px;
 }
 
 /* Features-Specific Styles */
 .feature-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
 }
 
 .feature-card {
-    border: 1px solid #ccc;
-    padding: 20px;
-    text-align: center;
+  border: 1px solid #ccc;
+  padding: 20px;
+  text-align: center;
 }
 
 .feature-card h3 {
-    margin-bottom: 10px;
+  margin-bottom: 10px;
 }
 
 /* Download-Specific Styles */
 .download-buttons {
-    display: flex;
-    flex-direction: column; /* Arrange buttons vertically */
-    align-items: center; /* Center buttons */
-    gap: 10px;
+  display: flex;
+  flex-direction: column;
+  /* Arrange buttons vertically */
+  align-items: center;
+  /* Center buttons */
+  gap: 10px;
 }
 
 /* Contact Form-Specific Styles */
 #contact-form {
-    max-width: 400px;
-    margin: 0 auto;
+  max-width: 400px;
+  margin: 0 auto;
+  background-color: var(--primary-color);
+  /* Match header background */
+  color: #fff;
+  /* White text for contrast */
+  padding: 20px;
+  border-radius: 5px;
 }
 
-.form-group {
-    margin-bottom: 10px;
+#contact-form .form-group {
+  margin-bottom: 10px;
 }
 
-label {
-    display: block;
-    margin-bottom: 5px;
+#contact-form label {
+  display: block;
+  margin-bottom: 5px;
 }
 
-input,
-textarea {
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #ccc;
+#contact-form input,
+#contact-form textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
 }
 
-button {
-    background-color: var(--primary-color);
-    color: #fff;
-    padding: 10px 15px;
-    border: none;
-    cursor: pointer;
+#contact-form button {
+  background-color: var(--secondary-color);
+  /* Match body background */
+  color: var(--primary-color);
+  /* Match header text color */
+  padding: 10px 15px;
+  border: none;
+  cursor: pointer;
 }
 
 footer {
-    background-color: var(--primary-color);
-    color: #fff;
-    padding: 10px 0;
-    text-align: center;
+  background-color: var(--primary-color);
+  color: #fff;
+  padding: 10px 0;
+  text-align: center;
 }
