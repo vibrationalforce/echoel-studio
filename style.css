@@ -50,6 +50,7 @@ h1,
 h2 {
   font-size: 2em;
   margin-bottom: 20px;
+  text-align: center; /* Center the headings */
 }
 
 /* Studio-Specific Styles */
