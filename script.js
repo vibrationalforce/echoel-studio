@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Download-Funktionalität
+    // Download functionality
     const downloadMac = document.getElementById('download-mac');
     const downloadWindows = document.getElementById('download-windows');
     const downloadLinux = document.getElementById('download-linux');
@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = 'download/echoel-studio-linux.tar.gz';
     });
 
-    // Formular-Funktionalität
+    // Form functionality
     const form = document.getElementById('contact-form');
     form.addEventListener('submit', handleSubmit);
 });
@@ -37,12 +37,12 @@ async function handleSubmit(event) {
 
         if (response.ok) {
             form.reset();
-            alert('Vielen Dank für Ihre Nachricht!');
+            alert('Thank you for your message!');
         } else {
-            throw new Error('Formular konnte nicht gesendet werden.');
+            throw new Error('Form could not be sent.');
         }
     } catch (error) {
         console.error(error);
-        alert('Es ist ein Fehler aufgetreten. Bitte versuchen Sie es später noch einmal.');
+        alert('An error occurred. Please try again later.');
     }
 }
