@@ -86,36 +86,4 @@ h2 {
 /* Kontaktformular-spezifische Styles */
 #contact-form {
     max-width: 400px;
-    margin: 0 auto;
-}
-
-.form-group {
-    margin-bottom: 10px;
-}
-
-label {
-    display: block;
-    margin-bottom: 5px;
-}
-
-input,
-textarea {
-    width: 100%;
-    padding: 8px;
-    border: 1px solid #ccc;
-}
-
-button {
-    background-color: var(--primary-color);
-    color: #fff;
-    padding: 10px 15px;
-    border: none;
-    cursor: pointer;
-}
-
-footer {
-    background-color: var(--primary-color);
-    color: #fff;
-    padding: 10px 0;
-    text-align: center;
-}
+    margin: 0 auto
