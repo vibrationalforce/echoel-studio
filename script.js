@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Download functionality
+    // Download functionality (no changes needed here)
     const downloadMac = document.getElementById('download-mac');
     const downloadWindows = document.getElementById('download-windows');
     const downloadLinux = document.getElementById('download-linux');
@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Form functionality
     const form = document.getElementById('contact-form');
     form.addEventListener('submit', handleSubmit);
+
+    // Smooth scrolling for navigation (add this part)
+    const navLinks = document.querySelectorAll('nav a');
+
+    navLinks.forEach(link => {
+        link.addEventListener('click', function(event) {
+            event.preventDefault();
+            const targetId = this.getAttribute('href');
+            const targetElement = document.querySelector(targetId);
+            targetElement.scrollIntoView({ behavior: 'smooth' });
+        });
+    });
 });
 
 async function handleSubmit(event) {
