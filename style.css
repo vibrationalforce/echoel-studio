@@ -1,4 +1,4 @@
-/* Grundlegende Styles */
+/* Basic Styles */
 :root {
     --primary-color: #222;
     --secondary-color: #f8f8f8;
@@ -49,7 +49,7 @@ h2 {
     margin-bottom: 20px;
 }
 
-/* Studio-spezifische Styles */
+/* Studio-Specific Styles */
 #studio {
     text-align: center;
 }
@@ -59,7 +59,7 @@ h2 {
     margin-top: 20px;
 }
 
-/* Funktionen-spezifische Styles */
+/* Features-Specific Styles */
 .feature-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -76,15 +76,15 @@ h2 {
     margin-bottom: 10px;
 }
 
-/* Download-spezifische Styles */
+/* Download-Specific Styles */
 .download-buttons {
     display: flex;
-    flex-direction: column; /* Buttons untereinander anordnen */
-    align-items: center; /* Buttons zentrieren */
+    flex-direction: column; /* Arrange buttons vertically */
+    align-items: center; /* Center buttons */
     gap: 10px;
 }
 
-/* Kontaktformular-spezifische Styles */
+/* Contact Form-Specific Styles */
 #contact-form {
     max-width: 400px;
     margin: 0 auto;
