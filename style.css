@@ -1,18 +1,17 @@
-/* Basic Styles */
-:root {
+/* Basic Styles */:root {
   --primary-color: #222;
   --secondary-color: #f8f8f8;
   --text-color: #333;
+  --accent-color: #00A5FF; /* Blau aus dem Farbkreis */
 }
 
 body {
-  font-family: sans-serif;
+  font-family: 'Open Sans', sans-serif; /* Moderne Schriftart */
   margin: 0;
   background-color: var(--secondary-color);
   color: var(--text-color);
-}
-
-.container {
+  line-height: 1.6;
+}.container {
   max-width: 960px;
   margin: 0 auto;
   padding: 20px;
@@ -47,7 +46,8 @@ section {
   padding: 40px 0;
 }
 
-h1, h2 {
+h1,
+h2 {
   font-size: 2em;
   margin-bottom: 20px;
 }
@@ -62,25 +62,19 @@ h1, h2 {
   margin-top: 20px;
 }
 
-/* Features-Specific Styles */
-.feature-grid {
+/* Features-Specific Styles */.feature-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 20px;
-}
-
-.feature-card {
+}.feature-card {
   border: 1px solid #ccc;
   padding: 20px;
   text-align: center;
-}
-
-.feature-card h3 {
+}.feature-card h3 {
   margin-bottom: 10px;
 }
 
-/* Download-Specific Styles */
-.download-buttons {
+/* Download-Specific Styles */.download-buttons {
   display: flex;
   flex-direction: column;
   /* Arrange buttons vertically */
@@ -101,7 +95,7 @@ h1, h2 {
   border-radius: 5px;
 }
 
-#contact-form .form-group {
+#contact-form.form-group {
   margin-bottom: 10px;
 }
 
@@ -134,20 +128,16 @@ footer {
   text-align: center;
 }
 
-#studio .download-button {
-  background-color: var(--primary-color);
+#studio.download-button {
+  background-color: var(--accent-color); /* Use accent color for button */
   color: #fff;
   padding: 10px 15px;
   border: none;
   cursor: pointer;
-}
-
-.download-button-container {
+}.download-button-container {
   text-align: center; /* Center the button within its container */
   margin-top: 20px;
-}
-
-.dark-mode {
+}.dark-mode {
   background-color: #222;
   /* Schwarzer Hintergrund */
   color: #fff;
