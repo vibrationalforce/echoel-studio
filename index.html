@@ -9,6 +9,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/meyda@latest/dist/web/meyda.min.js"></script>
     <script src="https://unpkg.com/@tonaljs/tonal@4.13.0/browser/tonal.min.js"></script>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
 </head>
 <body>
     <header>
@@ -29,16 +30,25 @@
         <section id="editor-section" style="display: none;">
             <h2>Editor</h2>
             <div class="toolbar">
-                <button id="zoom-in">Zoom In</button>
-                <button id="zoom-out">Zoom Out</button>
-                <label for="snap-to-grid">Snap to Grid:</label>
+                <div>
+                    <button id="zoom-in" title="Zoom In"> + </button>
+                    <button id="zoom-out" title="Zoom Out"> - </button>
+                </div>
+                <div>
+                <label for="snap-to-grid">Snap:</label>
                 <input type="checkbox" id="snap-to-grid">
-                 <label for="concert-pitch">Kammerton (A4):</label>
+                </div>
+                <div>
+                 <label for="concert-pitch">A4:</label>
                 <input type="number" id="concert-pitch" min="400" max="480" value="440">
                   <span>Hz</span>
-                <button id="detect-pitch">Kammerton erkennen</button>
-                <button id="save-project">Projekt speichern</button>
-                <input type="file" id="load-project" accept=".esproj"> </div>
+                </div>
+                <div>
+                <button id="detect-pitch" title="Kammerton erkennen">Detect A4</button>
+                <button id="save-project" title="Projekt speichern">Save</button>
+                <input type="file" id="load-project" accept=".esproj">
+                </div>
+            </div>
 
             <div class="timeline">
                 <div id="audio-tracks"></div>
@@ -46,14 +56,13 @@
                 <div id="cursor"></div>
             </div>
             <div class="controls">
-                <button id="play-pause">Play/Pause</button>
-                <button id="cut">Cut</button>
-                <button id="delete">Delete</button>
-                <button id="undo">Undo</button>
-                <button id="redo">Redo</button>
-                <button id="detect-key">Tonart Erkennen</button>
-                <button id="detect-bpm">BPM Erkennen</button>
-
+                <button id="play-pause" title="Play/Pause">Play/Pause</button>
+                <button id="cut" title="Ausschneiden">Cut</button>
+                <button id="delete" title="Löschen">Delete</button>
+                <button id="undo" title="Rückgängig">Undo</button>
+                <button id="redo" title="Wiederholen">Redo</button>
+                <button id="detect-key" title="Tonart erkennen">Key</button>
+                <button id="detect-bpm" title="BPM erkennen">BPM</button>
             </div>
 
             <div id="preview">
@@ -109,7 +118,6 @@
     <footer>
         <p>&copy; 2024 Echoel</p>
     </footer>
-
     <script src="script.js"></script>
 </body>
 </html>
