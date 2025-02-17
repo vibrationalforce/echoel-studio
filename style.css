@@ -67,6 +67,11 @@ h2 {
   flex-wrap: wrap;
   /* Zeilenumbruch bei kleinen Bildschirmen */
 }
+.toolbar > div{
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 
 #concert-pitch {
   width: 3rem;
@@ -95,6 +100,7 @@ h2 {
   /* Weitere Stile für die Spurendarstellung (z.B. abgerundete Ecken) */
   cursor: pointer;
   /* Zeiger ändert sich beim Überfahren */
+  user-select: none; /* Verhindert Textauswahl beim Draggen */
 }
 
 .track.selected {
@@ -146,32 +152,4 @@ h2 {
   margin-bottom: 20px;
 }
 
-#visuals-canvas {
-  width: 100%;
-  height: 100%;
-}
-
-#track-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.track-settings {
-  margin-bottom: 10px;
-}
-
-#export-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-
-footer {
-  background-color: var(--primary-color);
-  color: #fff;
-  padding: 10px 0;
-  text-align: center;
-}
+#visuals-
