@@ -9,7 +9,8 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/meyda@latest/dist/web/meyda.min.js"></script>
     <script src="https://unpkg.com/@tonaljs/tonal@4.13.0/browser/tonal.min.js"></script>
-     <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+
 </head>
 <body>
     <header>
@@ -22,8 +23,12 @@
             <h2>Medien hochladen oder aufnehmen</h2>
             <div class="upload-buttons">
                 <input type="file" id="file-upload" accept="audio/*,video/*,image/*" multiple>
-                <button id="record-audio">Audio aufnehmen</button>
-                <button id="record-video">Video aufnehmen</button>
+                <button id="record-audio" title="Audio aufnehmen">Audio aufnehmen</button>
+                <button id="record-video" title="Video aufnehmen">Video aufnehmen</button>
+            </div>
+            <div id="upload-progress" style="display: none;">
+              <progress value="0" max="100"></progress>
+              <span></span>
             </div>
         </section>
 
@@ -31,8 +36,8 @@
             <h2>Editor</h2>
             <div class="toolbar">
                 <div>
-                    <button id="zoom-in" title="Zoom In"> + </button>
-                    <button id="zoom-out" title="Zoom Out"> - </button>
+                    <button id="zoom-in" title="Vergrößern"> + </button>
+                    <button id="zoom-out" title="Verkleinern"> - </button>
                 </div>
                 <div>
                 <label for="snap-to-grid">Snap:</label>
@@ -45,7 +50,7 @@
                 </div>
                 <div>
                 <button id="detect-pitch" title="Kammerton erkennen">Detect A4</button>
-                <button id="save-project" title="Projekt speichern">Save</button>
+                <button id="save-project" title="Projekt speichern (Strg/Cmd + S)">Save</button>
                 <input type="file" id="load-project" accept=".esproj">
                 </div>
             </div>
@@ -54,15 +59,17 @@
                 <div id="audio-tracks"></div>
                 <div id="video-tracks"></div>
                 <div id="cursor"></div>
+                 <div class="selection-box" style="display: none;"></div>
             </div>
             <div class="controls">
-                <button id="play-pause" title="Play/Pause">Play/Pause</button>
-                <button id="cut" title="Ausschneiden">Cut</button>
-                <button id="delete" title="Löschen">Delete</button>
-                <button id="undo" title="Rückgängig">Undo</button>
-                <button id="redo" title="Wiederholen">Redo</button>
+                <button id="play-pause" title="Play/Pause (Leertaste)">Play/Pause</button>
+                <button id="cut" title="Ausschneiden (X)">Cut</button>
+                <button id="delete" title="Löschen (Entf)">Delete</button>
+                <button id="undo" title="Rückgängig (Strg/Cmd + Z)">Undo</button>
+                <button id="redo" title="Wiederholen (Strg/Cmd + Y)">Redo</button>
                 <button id="detect-key" title="Tonart erkennen">Key</button>
                 <button id="detect-bpm" title="BPM erkennen">BPM</button>
+
             </div>
 
             <div id="preview">
@@ -108,15 +115,18 @@
             <option value="wav">WAV (Audio)</option>
             <option value="jpeg">JPEG (Image)</option>
             <option value="png">PNG (Image)</option>
-
           </select>
            <button id="export-button">Exportieren</button>
+           <div id="export-progress" style="display: none;">
+              <progress value="0" max="100"></progress>
+               <span></span>
+           </div>
         </section>
 
     </main>
 
     <footer>
-        <p>&copy; 2024 Echoel</p>
+        <p>&copy; 2024 Echoel - <a href="https://www.paypal.me/echoel" target="_blank" rel="noopener noreferrer">Donate via PayPal</a></p>
     </footer>
     <script src="script.js"></script>
 </body>
