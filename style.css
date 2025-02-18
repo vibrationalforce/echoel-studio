@@ -792,5 +792,53 @@ footer {
       const resolutions = [
         { width: 1280,
 
+height: 720, label: "720p (HD)" },
+        { width: 1920, height: 1080, label: "1080p (Full HD)" },
+        { width: 3840, height: 2160, label: "4K (Ultra HD)" },
+        { width: 640, height: 480, label: "640x480 (SD)" }, // Standard Definition
+        { width: 854, height: 480, label: "480p (SD)" },   // 16:9 SD
+      ];
+
+      // Framerates (Beispiele)
+      const framerates = [24, 30, 60, 29.97, 59.94, 25];
+
+      // Audio-Bitrates (Beispiele)
+      const bitrates = [
+        { value: 128000, label: "128 kbps" },
+        { value: 192000, label: "192 kbps" },
+        { value: 320000, label: "320 kbps" },
+      ];
+
+      // Optionen zu den Select-Elementen hinzufügen
+      for (const res of resolutions) {
+        const option = document.createElement('option');
+        option.value = `${res.width}x${res.height}`;
+        option.textContent = `${res.label} (${res.width}x${res.height})`;
+        exportResolutionSelect.appendChild(option);
+      }
+
+      for (const fps of framerates) {
+        const option = document.createElement('option');
+        option.value = fps;
+        option.textContent = `${fps} fps`;
+        exportFramerateSelect.appendChild(option);
+      }
+      for (const rate of bitrates) {
+        const option = document.createElement('option');
+        option.value = rate.value;
+        option.textContent = `${rate.label}`;
+        exportAudioBitrateSelect.appendChild(option)
+      }
+    }
+     //Debounce Funktion, damit Events nicht zu oft ausgelöst werden.
+    function debounce(func, wait) {
+      let timeout;
+      return function(...args) { //Rest Parameter
+        const context = this;
+        clearTimeout(timeout); //Wenn die Funktion wieder aufgerufen wird, wird der alte Timeout gelöscht
+        timeout = setTimeout(() => func.apply(context, args), wait); //Neuer Timeout
+      };
+    }
+}); // Ende DOMContentLoaded
 
 
