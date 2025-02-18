@@ -1,6 +1,6 @@
 // worker.js
 
-// Hinweis: Libraries, die im Worker verwendet werden sollen, müssen *innerhalb* des Workers importiert werden.
+// WICHTIG: Libraries, die im Worker verwendet werden sollen, müssen *innerhalb* des Workers importiert werden.
 importScripts("https://unpkg.com/@tonaljs/tonal@4.13.0/browser/tonal.min.js");
 importScripts("https://cdn.jsdelivr.net/npm/meyda@latest/dist/web/meyda.min.js");
 importScripts("https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js");
@@ -21,24 +21,27 @@ self.onmessage = async (event) => {
       const bpm = await detectBPM(data.audioBuffer);
       self.postMessage({ type: 'bpmResult', bpm });
     } catch (error) {
-       self.postMessage({ type: 'error', message: 'Fehler bei der BPM-Erkennung: ' + error.message });
+      self.postMessage({ type: 'error', message: 'Fehler bei der BPM-Erkennung: ' + error.message });
     }
-  } else if (type === 'encodeAudio') { //hinzugefügt für den Export von mp3
-    try{
+  } else if (type === 'encodeAudio') {
+    try {
       const mp3Blob = encodeAudioToMp3(data.audioBuffer, data.bitRate);
-      self.postMessage({type: 'mp3Blob', mp3Blob});
-    } catch (error){
+      self.postMessage({ type: 'mp3Blob', mp3Blob });
+    } catch (error) {
       self.postMessage({ type: 'error', message: 'Fehler beim Encodieren zu MP3: ' + error.message });
     }
-  }else if(type === 'audioBufferToBlob'){
+  } else if (type === 'audioBufferToBlob') {
     try {
-          const blob = await audioBufferToBlob(data.audioBuffer, data.audioType);
-          self.postMessage({ type: 'blobData', blob });
-        } catch (error) {
-            self.postMessage({ type: 'error', message: 'Fehler beim Erstellen des Blobs: ' + error.message });
-        }
+      const blob = await audioBufferToBlob(data.audioBuffer, data.audioType);
+      self.postMessage({ type: 'blobData', blob });
+    } catch (error) {
+      self.postMessage({ type: 'error', message: 'Fehler beim Erstellen des Blobs: ' + error.message });
+    }
   }
 };
+
+
+// --- Funktionsdefinitionen (innerhalb des Workers) ---
 
 async function detectKey(audioBuffer) {
     // 1. Downsampling (optional, aber gut für Performance)
@@ -62,13 +65,12 @@ async function detectKey(audioBuffer) {
 }
 
 async function detectBPM(audioBuffer) {
-  const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
-  const source = offlineContext.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(offlineContext.destination);
-  source.start();
-  const renderedBuffer = await offlineContext.startRendering();
-
+    const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+    const source = offlineContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineContext.destination);
+    source.start();
+    const renderedBuffer = await offlineContext.startRendering();
 
     if (typeof Meyda === 'undefined') {
         console.error('Meyda is not loaded!');
@@ -78,12 +80,11 @@ async function detectBPM(audioBuffer) {
     // Extrahiere die nötigen Features
     const features = Meyda.extract(['amplitudeSpectrum', 'spectralCentroid'], renderedBuffer.getChannelData(0));
 
-     // Berechnung der BPM.  Diese Logik ist *sehr* vereinfacht und dient nur als Beispiel.
-    // Eine robuste BPM-Erkennung ist ein komplexes Thema!
+    // Berechnung der BPM (vereinfacht)
     const bpmEstimates = [];
     for (let i = 1; i < features.amplitudeSpectrum.length; i++) {
         const diff = features.amplitudeSpectrum[i] - features.amplitudeSpectrum[i - 1];
-         if (diff > 0.1) { // Sehr grober Schwellenwert für Onset!  Anpassen!
+        if (diff > 0.1) { // Sehr grober Schwellenwert!
             bpmEstimates.push(i);
         }
     }
@@ -94,15 +95,11 @@ async function detectBPM(audioBuffer) {
         for (let i = 1; i < bpmEstimates.length; i++) {
             intervals.push(bpmEstimates[i] - bpmEstimates[i - 1]);
         }
-
-        // Durchschnittliches Intervall berechnen
         const averageInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-
-        // BPM berechnen (Formel anpassen, je nach Samplingrate und Frame-Größe von Meyda)
           bpm = 60 / (averageInterval * (renderedBuffer.length / renderedBuffer.sampleRate) / features.amplitudeSpectrum.length );
     }
 
-    return bpm; // Gib den berechneten BPM-Wert zurück
+    return bpm;
 }
 
 //Audio zu mp3 encoden
@@ -134,6 +131,7 @@ function encodeAudioToMp3(audioBuffer, bitRate) {
 
     return new Blob(mp3Data, { type: 'audio/mp3' });
 }
+
 //Audiobuffer zu Blob konvertieren
 async function audioBufferToBlob(audioBuffer, audioType) {
   const numberOfChannels = audioBuffer.numberOfChannels;
@@ -153,13 +151,12 @@ async function audioBufferToBlob(audioBuffer, audioType) {
     // Rendere den OfflineAudioContext
     return offlineContext.startRendering()
     .then(renderedBuffer => {
-      // Hier den WAV-Blob erstellen (oder jeden anderen Codec, den du verwenden möchtest)
+      // Hier den WAV-Blob erstellen (oder jeden anderen Codec/Container, den du verwenden möchtest)
       const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length); //Verwende die Hilfsfunktion
       return wavBlob;
 
     });
 }
-
 
 //Hilfsfunktion um Audiobuffer zu wav zu konvertieren
 function bufferToWave(abuffer, len) {
@@ -197,7 +194,7 @@ function bufferToWave(abuffer, len) {
 
     while (pos < length) {
         for (i = 0; i < numOfChan; i++) {
-            // Interleave-Daten
+            // Interleave-Daten ( உதார: L-R-L-R...)
             sample = Math.max(-1, Math.min(1, channels[i][offset])); // Clamp
             sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // Skalierung + Runden
             view.setInt16(pos, sample, true); // Schreibe in Little-Endian
@@ -218,4 +215,3 @@ function bufferToWave(abuffer, len) {
         pos += 4;
     }
 }
-
