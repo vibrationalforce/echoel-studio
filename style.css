@@ -7,11 +7,16 @@
     --accent-color: #00a5ff;  /* Blau */
     --track-color: #333;      /* Dunkelgrau für Spuren */
     --track-highlight-color: #555; /* Etwas heller */
+    --selected-track-color: #777; /* Noch heller für ausgewählte Spuren */
     --cursor-color: #ff4444;  /* Rot */
     --selection-color: rgba(0, 165, 255, 0.3);
     --button-bg-color: #444;  /* Dunkelgrau für Buttons */
     --button-hover-color: #666; /* Heller beim Hover */
     --error-color: #ff5555;  /* Rot für Fehler */
+    --success-color: #4CAF50; /* Grün für Erfolg */
+    --warning-color: #ff9800; /* Orange für Warnungen */
+    --scrollbar-thumb-color: #555;  /* Dunkelgrau für Scrollbalken */
+    --scrollbar-track-color: #333; /* Dunkelgrau für Scrollbalken-Hintergrund */
 }
 
 
@@ -23,10 +28,10 @@ body {
     line-height: 1.6;
 }
 
-/* Dark Mode (optional, könnte über eine Klasse .dark-mode am body aktiviert werden) */
+/* Dark Mode (optional) */
 body.dark-mode {
     background-color: var(--primary-color);
-    color: var(--text-color);
+    /* Textfarbe muss hier nicht extra angepasst werden, da sie schon auf --text-color gesetzt ist */
 }
 
 .container {
@@ -40,7 +45,7 @@ header {
     color: #fff;
     padding: 10px 0;
     text-align: center;
-    border-bottom: 2px solid var(--accent-color); /* Akzentlinie */
+    border-bottom: 2px solid var(--accent-color);
 }
 
 h1, h2 {
@@ -49,10 +54,11 @@ h1, h2 {
     text-align: center;
 }
 h2{
-    color: var(--primary-color);
+  color: var(--primary-color); /*Überschriften in Upload/Editor/Export */
 }
 
-/* Upload-Bereich */
+/* --- Upload-Bereich --- */
+
 .upload-buttons {
     display: flex;
     flex-direction: column;
@@ -62,50 +68,312 @@ h2{
 }
 
 #file-upload {
-    margin-bottom: 1rem;
+    margin-bottom: 1rem; /* Mehr Platz unter dem Input */
+}
+#record-audio, #record-video, #capture-photo{
+  width: 100%;
+  max-width: 250px; /*Setzt die maximale Breite*/
 }
 
-/* Fortschrittsanzeige */
+/* --- Fortschrittsanzeige --- */
+
 #upload-progress, #export-progress {
     text-align: center;
     margin-top: 10px;
+     display: none; /* Standardmäßig ausgeblendet */
 }
 
-#upload-progress progress, #export-progress progress{
+#upload-progress progress, #export-progress progress {
     width: 80%;
     height: 20px;
     margin-bottom: 5px;
-    border-radius: 10px;
+    border-radius: 10px; /* Abgerundete Ecken */
 }
 
-/* Chrome/Safari */
-#upload-progress progress::-webkit-progress-value, #export-progress progress::-webkit-progress-value{
-    border-radius: 10px;
-     background-color: var(--accent-color);
-}
-
-/* Firefox */
-#upload-progress progress::-moz-progress-bar, #export-progress progress::-moz-progress-bar{
+/* Browser-spezifische Anpassungen für den Fortschrittsbalken */
+#upload-progress progress::-webkit-progress-value,
+#export-progress progress::-webkit-progress-value {
     border-radius: 10px;
     background-color: var(--accent-color);
 }
 
+#upload-progress progress::-moz-progress-bar,
+#export-progress progress::-moz-progress-bar {
+    border-radius: 10px;
+    background-color: var(--accent-color);
+}
 
-/* Toolbar */
+/* --- Toolbar (oben im Editor) --- */
+
 .toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-around;
-    /* Gleichmäßig verteilen */
+    justify-content: space-around; /* Gleichmäßig verteilen */
     gap: 10px;
     margin-bottom: 10px;
-    flex-wrap: wrap;
-    /* Zeilenumbruch bei kleinen Bildschirmen */
+    flex-wrap: wrap; /* Zeilenumbruch bei kleinen Bildschirmen */
     padding: 10px;
     background-color: var(--secondary-color);
     border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Dezenter Schatten */
 }
+
 .toolbar > div {
+    display: flex;         /* Elemente nebeneinander */
+    align-items: center;  /* Vertikal zentrieren */
+    gap: 0.5rem;         /* Kleinerer Abstand */
+}
+
+#concert-pitch {
+    width: 4em; /* Etwas breiter */
+}
+
+/* --- Zeitleiste (Timeline) --- */
+
+.timeline {
+    background-color: var(--track-color);
+    width: 100%;
+    height: 200px;  /* Anfangshöhe, anpassbar */
+    overflow-x: auto; /* Horizontales Scrollen */
+    margin-bottom: 10px;
+    position: relative; /* Für absolute Positionierung */
+    border-radius: 5px;
+     /* Verbesserte Scrollbalken (nur WebKit-Browser) */
+    &::-webkit-scrollbar {
+        width: 12px;
+        height: 12px; /* Vertikaler Scrollbalken */
+    }
+
+    &::-webkit-scrollbar-track {
+        background: var(--scrollbar-track-color);
+        border-radius: 10px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background-color: var(--scrollbar-thumb-color);
+        border-radius: 10px;
+        border: 3px solid var(--track-color); /* Rahmen, um Thumb hervorzuheben */
+    }
+}
+
+/* --- Spuren (Tracks) --- */
+
+.track {
+    background-color: var(--track-highlight-color);
+    height: 50px;
+    margin-bottom: 5px;
+    position: absolute; /* Innerhalb der Timeline positionieren */
+    border-radius: 5px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;        /* Inhalt zentrieren */
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;      /* Verhindert, dass Inhalt über den Rand hinausragt*/
+     transition: background-color 0.2s ease; /* Sanfter Übergang */
+}
+
+.track.selected {
+    background-color: var(--selection-color);
+    border: 2px solid var(--accent-color);
+}
+
+.track.dragging {
+    opacity: 0.7;  /* Visuelles Feedback beim Ziehen */
+    cursor: grabbing; /* Anderer Cursor */
+}
+
+
+#cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    height: 100%;
+    background-color: var(--cursor-color);
+    z-index: 10;  /* Über den Spuren */
+    pointer-events: none; /* Klicks ignorieren */
+}
+.selection-box {
+    position: absolute;
+    border: 1px dashed var(--accent-color);
+    background-color: var(--selection-color);
+    z-index: 5;
+    pointer-events: none;
+}
+
+/* --- Bedienelemente (Play, Cut, etc.) --- */
+
+.controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    justify-content: center; /* Zentrieren */
+    flex-wrap: wrap;         /* Umbruch auf kleineren Bildschirmen */
+}
+
+button {
+    background-color: var(--button-bg-color);
+    color: var(--text-color);
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s ease; /* Sanfter Übergang */
+    font-size: 1rem; /* Einheitliche Schriftgröße */
+}
+
+button:hover {
+    background-color: var(--button-hover-color);
+}
+
+button:active {
+    background-color: var(--accent-color); /* Noch stärker hervorheben */
+}
+
+/* --- Vorschau (Video/Audio) --- */
+
+#preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+#video-preview,
+#audio-preview {
+    max-width: 90%; /* An Container anpassen */
+    margin: 1rem;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3); /* Dezenter Schatten */
+}
+
+/* --- Visualisierungs-Container --- */
+
+#visuals-container {
+    width: 100%;
+    height: 200px; /* Feste Höhe */
+    margin-bottom: 20px;
+    position: relative; /* Falls du absolute Positionierung innerhalb brauchst */
+}
+
+#visuals-canvas {
+    width: 100%;
+    height: 100%;
+     border-radius: 5px;
+}
+
+.visuals-controls {
+    position: absolute; /* Über dem Canvas */
+    top: 10px;
+    left: 10px;
+    z-index: 10; /* Über dem Canvas */
+    background-color: rgba(0, 0, 0, 0.5); /* Halbtransparent */
+    padding: 5px;
+    border-radius: 5px;
+}
+
+
+/* --- Spur-Einstellungen --- */
+
+#track-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+    background-color: var(--secondary-color);
+    border-radius: 5px;
+    padding: 10px;
+     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Dezenter Schatten */
+}
+
+.track-settings {
+    margin-bottom: 10px;
     display: flex;
     align-items: center;
-    gap: .5rem;
+    gap: 10px;
+    width: 100%;
+    justify-content: space-between; /* Platz zwischen Label und Input */
+}
+
+.track-settings label {
+    flex: 1; /* Label nimmt verfügbaren Platz ein */
+    text-align: right;
+    padding-right: 10px;
+}
+
+.track-settings input[type="range"], .track-settings select {
+    flex: 2; /* Mehr Platz für Slider/Select */
+    width: 100%; /* Volle Breite */
+    padding: 8px;
+    border: 1px solid var(--track-color);
+    border-radius: 4px;
+    box-sizing: border-box; /* Padding/Border in Breite einschließen */
+}
+
+/* --- Export-Bereich --- */
+
+#export-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Zentrieren */
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: var(--secondary-color);
+    border-radius: 5px;
+     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Dezenter Schatten */
+}
+
+#export-section select,
+#export-section label {
+    margin: 0.5rem; /* Etwas Abstand */
+}
+
+#export-video-format{
+  margin-bottom: 1rem;
+}
+
+/* --- Footer --- */
+
+footer {
+    background-color: var(--primary-color);
+    color: #fff;
+    padding: 10px 0;
+    text-align: center;
+    border-top: 2px solid var(--accent-color);
+}
+
+/* --- Verbesserungen für Responsivität --- */
+
+/* Kleinere Bildschirme (z.B. Smartphones) */
+@media (max-width: 768px) {
+    .toolbar {
+        flex-direction: column; /* Buttons untereinander */
+        align-items: stretch;  /* Volle Breite */
+    }
+
+    .toolbar > div {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .controls {
+        flex-direction: column; /* Buttons untereinander */
+    }
+
+    #track-controls {
+      width: 95%;
+    }
+
+    .track-settings {
+        flex-direction: column; /* Label über Input */
+        align-items: stretch;  /* Volle Breite */
+    }
+     .track-settings label {
+            text-align: center; /* Text zentriert */
+            padding-right: 0;    /* Kein Abstand mehr */
+        }
+     .track-settings input[type="range"] {
+      flex: 1; /* Volle Breite */
+     }
+}
