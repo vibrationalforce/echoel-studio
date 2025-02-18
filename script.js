@@ -917,4 +917,1275 @@ saturationSlider.value = trackData.effectValues.saturation
                 track.mediaElement.currentTime = startTime;
                 track.mediaElement.play().catch(err => { // Fehler abfangen (Promise)
                   console.error(`Fehler beim Abspielen von
+ ${track.type} (Track ID ${track.id}):`, err);
+                });
+              }
+            }
+          });
+        } else if (audioContext.state === 'closed') { // *NEU*: Behandlung für geschlossenen Kontext
+          // Behandle den Fall, dass der AudioContext geschlossen wurde
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          analyser = audioContext.createAnalyser(); //Muss neu erstellt werden
+          analyser.fftSize = 2048;
+          isPlaying = true;
+          playPauseBtn.textContent = 'Pause';
+          updateCursor(); // Cursorbewegung
+
+          // Starte die Medienwiedergabe für *alle* Spuren
+          for (const track of tracks) {
+            if (track.mediaElement && (track.type === 'audio' || track.type === 'video')) {
+              // NEU: Berechnung der korrekten Startzeit relativ zur Timeline-Position
+              const timelinePosition = parseFloat(track.element.style.left) / (50 * zoomLevel);
+              const startTime = Math.max(0, audioContext.currentTime - timelinePosition);
+              track.mediaElement.currentTime = startTime;
+              track.mediaElement.play().catch(err => { // Fehler abfangen (Promise)
+                console.error(`Fehler beim Abspielen von ${track.type} (Track ID ${track.id}):`, err);
+              });
+            }
+          }
+        }
+      }
+    }
+
+
+    // --- Schneiden ---
+    async function cutSelectedTracks() {
+      if (selectedTracks.length === 0) return;
+
+      saveStateForUndo(); // Vor der Änderung speichern
+
+      const cutPosition = parseFloat(cursor.style.left) / (50 * zoomLevel);  // Pixel in Sekunden
+
+      // Stelle sicher, dass die Tracks in der richtigen Reihenfolge sind
+      const sortedTracks = [...selectedTracks].sort((a, b) => {
+        return tracks.findIndex(track => track.id === a) - tracks.findIndex(track => track.id === b)
+      })
+
+      for (const trackId of sortedTracks) {
+        await cutTrack(trackId, cutPosition); //Das await ist wichtig!
+      }
+    }
+
+    async function cutTrack(trackId, position) {
+      const track = tracks.find(t => t.id === trackId);
+      if (!track) return;
+
+      const originalUrl = track.src; //wichtig für das richtige zuschneiden
+      const originalBlob = await getBlobFromUrl(originalUrl); // Funktion von vorheriger Antwort
+
+      if (!originalBlob) {
+        console.error("Blob konnte nicht (erneut) geladen werden. Schneiden nicht möglich.");
+        return;
+      }
+      const cutTime = position; //  Pixel nicht mehr in Sekunden umrechnen.
+
+
+      if (track.type === 'audio') {
+        //Audio schneiden
+        const originalBuffer = await audioContext.decodeAudioData(await originalBlob.arrayBuffer());
+        // 1. Teile den originalBuffer in zwei Teile
+        const firstBuffer = audioContext.createBuffer(
+          originalBuffer.numberOfChannels,
+          Math.floor(cutTime * originalBuffer.sampleRate),
+          originalBuffer.sampleRate
+        );
+
+        const secondBuffer = audioContext.createBuffer(
+          originalBuffer.numberOfChannels,
+          originalBuffer.length - Math.floor(cutTime * originalBuffer.sampleRate),
+          originalBuffer.sampleRate
+        );
+
+        // Kopiere die Daten
+        for (let channel = 0; channel < originalBuffer.numberOfChannels; channel++) {
+          const originalData = originalBuffer.getChannelData(channel);
+          const firstData = firstBuffer.getChannelData(channel);
+          const secondData = secondBuffer.getChannelData(channel);
+
+          firstData.set(originalData.subarray(0, Math.floor(cutTime * originalBuffer.sampleRate)));
+          secondData.set(originalData.subarray(Math.floor(cutTime * originalBuffer.sampleRate)));
+
+        }
+
+        //Funktion zum konvertieren von Audiobuffer zu Blob
+        async function audioBufferToBlob(audioBuffer, type = 'audio/wav') {
+          const worker = new Worker('./audio-worker.js');
+
+          return new Promise((resolve, reject) => {
+            worker.onmessage = (e) => {
+              if (e.data.error) {
+                reject(e.data.error);
+              } else {
+                resolve(e.data.blob);
+              }
+              worker.terminate(); // Worker beenden
+            };
+
+            worker.onerror = (error) => {
+              reject(error);
+              worker.terminate();
+            };
+
+            worker.postMessage({ audioBuffer, type });
+          });
+        }
+
+
+        // Erstelle neue Blobs und URLs
+        const firstBlob = await audioBufferToBlob(firstBuffer);
+        const firstUrl = URL.createObjectURL(firstBlob);
+
+        const secondBlob = await audioBufferToBlob(secondBuffer);
+        const secondUrl = URL.createObjectURL(secondBlob);
+
+        // 2. Ersetze den ursprünglichen Track durch die zwei neuen
+        //wavesurfer Instanz updaten und löschen
+        if (wavesurferInstances[trackId]) {
+          wavesurferInstances[trackId].destroy(); // Zerstöre die alte Wavesurfer-Instanz
+          delete wavesurferInstances[trackId]; // Lösche sie aus dem Objekt
+        }
+        const newTrack = { ...track, src: firstUrl, duration: firstBuffer.duration, element: null }; //  element: null, wird neu erstellt
+        tracks.splice(tracks.indexOf(track), 1, newTrack); // Ersetzen
+
+        const secondTrack = {
+          ...track, // Kopie aller Eigenschaften
+          id: currentTrackId++, // Neue ID!
+          src: secondUrl,
+          startTime: track.startTime + cutTime,
+          duration: secondBuffer.duration,
+          element: null, // Wird neu erstellt in addMediaToTimeline
+        };
+        tracks.push(secondTrack);
+
+        // Alte URL freigeben (WICHTIG!)
+        URL.revokeObjectURL(track.src);
+
+        // 3. Zeitleiste aktualisieren (DOM)
+        track.element.remove();
+        addMediaToTimeline(firstBlob, 'audio', firstBuffer, newTrack);
+        addMediaToTimeline(secondBlob, 'audio', secondBuffer, secondTrack);
+
+      } else if (track.type === 'video') {
+        //Video schneiden
+
+        const originalVideo = document.createElement('video');
+        originalVideo.src = track.src;
+        await originalVideo.play(); // Warten, bis das Video geladen ist
+        // 1. Bestimme die Frame-Rate (vereinfacht)
+        const frameRate = 30; //  Annäherung, da exakte Bestimmung im Browser schwierig ist
+
+        // 2. Berechne die Frame-Nummer für den Schnitt
+        const cutFrame = Math.floor(cutTime * frameRate);
+
+        // 3. Erstelle zwei MediaRecorder
+        const firstRecorder = new MediaRecorder(originalVideo.captureStream());
+        const secondRecorder = new MediaRecorder(originalVideo.captureStream());
+
+        // 4. Arrays für die Daten
+        const firstChunks = [];
+        const secondChunks = [];
+
+        // 5. Event-Handler für die Recorder
+        firstRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            firstChunks.push(event.data);
+          }
+        };
+        secondRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            secondChunks.push(event.data);
+          }
+        };
+
+        // 6. Starte die Aufnahme, stoppe nach der berechneten Zeit
+
+        //Promise für setTimeOut
+        function wait(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        firstRecorder.start();
+        await wait(cutTime * 1000); //Zeit berechnen
+        firstRecorder.stop(); // Stoppe den ersten Recorder nach cutTime Sekunden
+
+        secondRecorder.start(); // Starte den zweiten Recorder sofort
+        originalVideo.currentTime = cutTime; // Springe im Originalvideo zur cutTime
+        await wait((originalVideo.duration - cutTime) * 1000) //solange aufnehmen bis das Ursprungsvideo zu Ende ist
+        secondRecorder.stop();
+
+
+
+        // 7. Erstelle Blobs aus den Daten
+        const firstBlob = new Blob(firstChunks, { type: 'video/webm' });
+        const secondBlob = new Blob(secondChunks, { type: 'video/webm' });
+
+        // URLs erstellen (für die spätere Verwendung)
+        const firstUrl = URL.createObjectURL(firstBlob);
+        const secondUrl = URL.createObjectURL(secondBlob);
+
+        // 8. Ersetze den ursprünglichen Track durch die zwei neuen
+        //wavesurfer Instanz updaten und löschen, falls vorhanden
+        if (wavesurferInstances[trackId]) {
+          wavesurferInstances[trackId].destroy(); // Zerstöre die alte Wavesurfer-Instanz
+          delete wavesurferInstances[trackId]; // Lösche sie aus dem Objekt
+        }
+
+        const newTrack = { ...track, src: firstUrl, duration: cutTime, element: null }; //  element: null
+        tracks.splice(tracks.indexOf(track), 1, newTrack); // Ersetzen
+
+        const secondTrack = {
+          ...track, // Kopie aller Eigenschaften
+          id: currentTrackId++, // Neue ID!
+          src: secondUrl,
+          startTime: track.startTime + cutTime,
+          duration: track.duration - cutTime,
+          element: null, //wird neu erstellt
+        };
+        tracks.push(secondTrack);
+        // Alte URL freigeben (WICHTIG!)
+        URL.revokeObjectURL(track.src);
+
+        // 9. Zeitleiste aktualisieren (DOM)
+        track.element.remove();
+        addMediaToTimeline(firstBlob, 'video', null, newTrack); //Ersten Track hinzufügen
+        addMediaToTimeline(secondBlob, 'video', null, secondTrack); // Zweiten Track hinzufügen
+
+
+      } else if (track.type === 'image') {
+        // Bilder können nicht geschnitten werden.
+        console.warn("Bilder können nicht geschnitten werden.");
+      }
+    }
+
+    // --- Löschen ---
+    function deleteSelectedTracks() {
+      if (selectedTracks.length === 0) return;
+      saveStateForUndo();
+      const tracksToDelete = [...selectedTracks];
+
+      for (const trackId of tracksToDelete) {
+        deleteTrack(trackId);
+      }
+      selectedTracks = [];
+      updateTrackControls();
+    }
+
+    function deleteTrack(trackId) {
+      const track = tracks.find(t => t.id === trackId);
+      if (!track) return;
+
+      track.element.remove(); // Entfernt Element aus der Timeline
+
+      if (wavesurferInstances[trackId]) {
+        wavesurferInstances[trackId].destroy();
+        delete wavesurferInstances[trackId];
+      }
+
+      URL.revokeObjectURL(track.src); // Gibt Speicher frei, der durch Blob-URL belegt wird
+      tracks = tracks.filter(t => t.id !== trackId); //Entfernt die Spur aus dem tracks-Array
+    }
+
+    // --- Kopieren ---
+    function copySelectedTrack() {
+      if (selectedTracks.length === 0) return;
+      const trackId = selectedTracks[0]; //Nimmt nur eine Spur
+      const track = tracks.find((t) => t.id === trackId);
+
+      if (track) {
+        // Erstelle eine *tiefe* Kopie des Track-Objekts
+        copiedTrack = JSON.parse(JSON.stringify(track)); // Klone das Objekt
+        copiedTrack.id = currentTrackId++; // Wichtig: Neue ID, um Konflikte zu vermeiden!
+      }
+    }
+
+    // --- Einfügen ---
+
+    function pasteCopiedTrack() {
+      if (!copiedTrack) return;
+
+      saveStateForUndo(); // Vor der Änderung speichern!
+
+      // Erstelle eine *tiefe* Kopie des kopierten Tracks (damit Änderungen am Original das nicht beeinflussen)
+      const newTrack = JSON.parse(JSON.stringify(copiedTrack));
+
+      // Aktualisiere ID und Element, um Konflikte zu vermeiden
+      newTrack.id = currentTrackId++;
+      newTrack.element = null; // Wird in addMediaToTimeline neu erstellt.
+      newTrack.startTime = parseFloat(cursor.style.left) / (50 * zoomLevel); // Neue Startzeit (Cursorposition)
+
+      // Erstelle einen neuen Blob und eine neue URL für die kopierte Spur
+      getBlobFromUrl(copiedTrack.src).then(originalBlob => { //Blob laden
+        if (!originalBlob) {
+          console.error('Original Blob nicht gefunden');
+          return;
+        }
+
+        const newBlob = new Blob([originalBlob], { type: originalBlob.type }); //neuer Blob
+        const newUrl = URL.createObjectURL(newBlob); //neue URL
+        newTrack.src = newUrl;
+
+        if (newTrack.type === 'audio') { //neuen Audiobuffer erstellen
+          getAudioBufferFromFile(newBlob).then(audioBuffer => {
+            newTrack.audioBuffer = audioBuffer;
+            addMediaToTimeline(newBlob, 'audio', audioBuffer, newTrack);
+            tracks.push(newTrack); // Füge die *neue* Spur zum tracks-Array hinzu
+          });
+        } else { //Falls Video oder Bild
+          addMediaToTimeline(newBlob, newTrack.type, null, newTrack);
+          tracks.push(newTrack); // Füge die *neue* Spur zum tracks-Array hinzu
+        }
+      });
+    }
+
+    // --- Rückgängig/Wiederholen ---
+
+    function saveStateForUndo() {
+      const currentState = {
+        tracks: JSON.parse(JSON.stringify(tracks)),  // Tiefe Kopie
+        zoomLevel: zoomLevel,
+        selectedTracks: [...selectedTracks], // Kopie
+      };
+      undoStack.push(currentState);
+      if (undoStack.length > MAX_UNDO_STATES) {
+        undoStack.shift(); // Älteste entfernen
+      }
+      redoStack = []; // Redo-Stack leeren
+    }
+
+    function undo() {
+      if (undoStack.length === 0) return;
+
+      const previousState = undoStack.pop();
+      redoStack.push(getCurrentState());
+      restoreState(previousState);
+    }
+
+    function redo() {
+      if (redoStack.length === 0) return;
+
+      const nextState = redoStack.pop();
+      undoStack.push(getCurrentState());
+      restoreState(nextState);
+    }
+
+    function getCurrentState() {
+      return {
+        tracks: JSON.parse(JSON.stringify(tracks)), // Tiefe Kopie
+        zoomLevel: zoomLevel,
+        selectedTracks: [...selectedTracks], // Kopie
+      };
+    }
+
+    function restoreState(state) {
+      clearTimeline();
+      zoomLevel = state.zoomLevel;
+      selectedTracks = state.selectedTracks;
+
+      const loadPromises = state.tracks.map(trackData => {
+        return getBlobFromUrl(trackData.src)
+          .then(blob => {
+            if (!blob) {
+              console.error("Blob konnte nicht wiederhergestellt werden:", trackData.src);
+              return;
+            }
+            const file = new File([blob], "media-file", { type: blob.type });
+
+            if (trackData.type === 'audio') {
+              let audioBuffer = null;
+              if (trackData.audioBuffer) {
+                audioBuffer = audioContext.createBuffer(
+                  trackData.audioBuffer.numberOfChannels,
+                  trackData.audioBuffer.length,
+                  trackData.audioBuffer.sampleRate
+                );
+                for (let i = 0; i < trackData.audioBuffer.numberOfChannels; i++) {
+                  audioBuffer.getChannelData(i).set(trackData.audioBuffer.channelData[i]);
+                }
+              }
+              addMediaToTimeline(file, 'audio', audioBuffer, trackData);
+            } else {
+              addMediaToTimeline(file, trackData.type, null, trackData);
+            }
+          });
+      });
+      Promise.all(loadPromises).then(() => { //Wenn alles geladen wurde
+        updateZoom();
+        updateTrackControls();
+        editorSection.style.display = 'block';//Editor Anzeigen
+        exportSection.style.display = 'block';
+      });
+    }
+
+    //Alles zurücksetzen
+    function clearTimeline() {
+      //DOM-Elemente entfernen
+      audioTracksContainer.innerHTML = '';
+      videoTracksContainer.innerHTML = '';
+      imageTracksContainer.innerHTML = '';
+
+
+      // Wavesurfer-Instanzen zerstören
+      for (const trackId in wavesurferInstances) {
+        if (wavesurferInstances.hasOwnProperty(trackId)) {
+          wavesurferInstances[trackId].destroy();
+        }
+      }
+      wavesurferInstances = {};
+
+      // URLs freigeben (Speicherleck verhindern!)
+      for (const track of tracks) {
+        URL.revokeObjectURL(track.src);
+      }
+
+      tracks = []; //Tracks leeren
+      currentTrackId = 0;
+      selectedTracks = []; //Auswahl leeren
+    }
+
+    // Globale Einstellungen zurücksetzen
+    function resetGlobalSettings() {
+      concertPitch = 440;
+      concertPitchInput.value = concertPitch;
+      zoomLevel = 1;
+      snapToGridCheckbox.checked = false;
+    }
+    // --- Verschieben von Sp    // --- Verschieben von Spuren (Drag-and-Drop-Handler) ---
+
+    let draggedTrack = null; // Das aktuell gezogene Track-Objekt
+
+    function handleDragStart(event) {
+        const trackId = parseInt(event.target.dataset.trackId);
+        draggedTrack = tracks.find(t => t.id === trackId);
+
+        if (!draggedTrack) {
+            event.preventDefault(); // Verhindere das Ziehen, wenn kein Track gefunden wurde
+            return;
+        }
+
+        event.dataTransfer.setData('text/plain', trackId); // ID für den Drop-Event
+        event.target.classList.add('dragging'); // Visuelles Feedback (CSS-Klasse)
+    }
+
+
+    function handleDragOver(event) {
+      event.preventDefault();  // Erlaube das Droppen (Standardverhalten verhindern)
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+      if (!draggedTrack) return;
+
+      const trackId = parseInt(event.dataTransfer.getData('text/plain'));
+      if (isNaN(trackId)) return; // Stelle sicher, dass die ID eine Zahl ist.
+
+      const dropTarget = event.target.closest('.timeline');
+      if (!dropTarget) {
+        draggedTrack.element.classList.remove('dragging'); // Entferne die Klasse
+        draggedTrack = null;
+        return; //Frühzeitiger Abbruch
+      }
+
+      // Berechne die neue Startzeit basierend auf der Mausposition (relativ zur Timeline)
+      const timelineRect = timeline.getBoundingClientRect();
+      let newStartTime = (event.clientX - timelineRect.left) / (50 * zoomLevel);
+
+      // Einrasten am Raster (optional)
+      if (snapToGrid) {
+        newStartTime = Math.round(newStartTime / 0.5) * 0.5; //  0.5 Sekunden Raster
+      }
+        newStartTime = Math.max(0, newStartTime); //Keine Negativen Zeiten
+
+
+      // Aktualisiere die Startzeit des Tracks
+      draggedTrack.startTime = newStartTime;
+      updateTrackDisplay(draggedTrack); // Neuzeichnen
+
+      draggedTrack.element.classList.remove('dragging'); // Feedback entfernen
+      draggedTrack = null; // Zurücksetzen
+      saveStateForUndo(); //Speichern für Undo
+    }
+
+    // --- Zoomen ---
+
+    function updateZoom() {
+         // Begrenze den Zoom-Level (optional, aber sinnvoll)
+        zoomLevel = Math.max(0.5, Math.min(5, zoomLevel)); //  Werte anpassen
+
+        // Aktualisiere die Breite *aller* Spuren
+        for (const track of tracks) {
+            updateTrackDisplay(track); // Nutze die existierende Funktion
+        }
+
+        // Cursorposition aktualisieren (wichtig nach dem Zoomen)
+        const currentTime = audioContext.currentTime;
+        cursor.style.left = `${currentTime * 50 * zoomLevel}px`;
+    }
+     //Mausrad
+    function handleTimelineWheel(event) {
+        event.preventDefault(); // Standardverhalten (Scrollen) verhindern
+
+        // Zoom-Faktor (stärker als vorher)
+        const delta = event.deltaY > 0 ? 0.9 : 1.1;  // Mausrad nach unten/oben
+        zoomLevel *= delta;
+        updateZoom(); //oder debounced Version
+    }
+
+     //Debounce Funktion, damit nicht zu viele Events gefeuert werden.
+     const debouncedUpdateZoom = debounce(updateZoom, 50); //kürzere Reaktionszeit
+
+
+    // --- Timeline-Interaktion (Klicken) ---
+    timeline.addEventListener('click', handleTimelineClick);
+
+    function handleTimelineClick(event) {
+        // Berechne die Klickposition relativ zur Timeline
+        const timelineRect = timeline.getBoundingClientRect();
+        const clickX = event.clientX - timelineRect.left;
+
+        // Umrechnung von Pixeln in Sekunden (unter Berücksichtigung des Zoom-Levels)
+        const clickTime = clickX / (50 * zoomLevel);
+
+        // Setze die Abspielposition im AudioContext
+        if (audioContext.state === 'suspended') {
+             audioContext.resume().then(() => { //Context Zustand prüfen
+              audioContext.currentTime = clickTime; // Zeit setzen
+            });
+        } else {
+          audioContext.currentTime = clickTime;
+        }
+
+        // Bewege den Cursor an die neue Position (visuell)
+        cursor.style.left = `${clickX}px`;
+
+        // Starte die Wiedergabe, falls nicht schon aktiv
+        if (!isPlaying) {
+            togglePlayPause();
+        }
+    }
+
+
+      // --- Audio-Analyse (Tonart, BPM, Kammerton) ---
+      // Web-Worker Funktionen
+    function detectKey(audioBuffer) {
+        // Sende den AudioBuffer an den Web Worker
+        audioWorker.postMessage({ type: 'detectKey', data: { audioBuffer } });
+    }
+
+    function detectBPM(audioBuffer) {
+        audioWorker.postMessage({ type: 'detectBPM', data: { audioBuffer } });
+    }
+
+    function detectConcertPitch() {
+      analyser.getByteFrequencyData(dataArray); // Daten in das Array kopieren
+
+      let maxIndex = 0;
+      let maxValue = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        if (dataArray[i] > maxValue) {
+          maxValue = dataArray[i];
+          maxIndex = i;
+        }
+      }
+
+      const frequency = maxIndex * audioContext.sampleRate / analyser.fftSize;
+      alert(`Geschätzter Kammerton: ${frequency.toFixed(1)} Hz`); // Ausgabe
+      concertPitchInput.value = frequency.toFixed(1); //Eingabefeld aktualisieren
+    }
+
+    function updateConcertPitch() {
+      const newPitch = parseFloat(concertPitchInput.value);
+      if (!isNaN(newPitch) && newPitch >= 400 && newPitch <= 480) {
+        concertPitch = newPitch;
+        localStorage.setItem('concertPitch', concertPitch); // Speichern
+      } else {
+        alert("Ungültiger Kammerton. Bitte einen Wert zwischen 400 und 480 Hz eingeben.");
+        concertPitchInput.value = concertPitch; // Zurücksetzen
+      }
+    }
+
+    // --- Visualisierung ---
+
+    function renderVisuals() {
+      if (!visualsContext) return; // Keine Canvas vorhanden, Abbruch
+
+      const mode = visualsModeSelect.value; // Aktuellen Modus abrufen
+
+      visualsContext.clearRect(0, 0, visualsCanvas.width, visualsCanvas.height); // Löschen
+
+      if (mode === 'off') return; // Visualisierung deaktiviert
+
+      if (mode === 'bars' || mode === 'spectrum') {
+        analyser.getByteFrequencyData(dataArray); // Frequenzdaten
+      } else if (mode === 'waveform') {
+        analyser.getByteTimeDomainData(dataArray); // Zeitdaten (Wellenform)
+      }
+
+      const barWidth = (visualsCanvas.width / bufferLength) * 2.5;
+      let barHeight;
+      let x = 0;
+
+      if (mode === 'bars') {
+        // Balkenanzeige
+        for (let i = 0; i < bufferLength; i++) {
+          barHeight = dataArray[i] * (visualsCanvas.height / 255); // Skalierung (0-255)
+          const r = barHeight + (25 * (i / bufferLength)); // Rot-Anteil
+          const g = 250 * (i / bufferLength);                // Grün-Anteil
+          const b = 50;                                     // Blau-Anteil
+          visualsContext.fillStyle = `rgb(${r}, ${g}, ${b})`;
+          visualsContext.fillRect(x, visualsCanvas.height - barHeight, barWidth, barHeight);
+          x += barWidth + 1;
+        }
+      } else if (mode === 'spectrum') {
+        // Spektralanzeige (als durchgezogene Linie)
+        visualsContext.beginPath();
+        visualsContext.moveTo(0, visualsCanvas.height);
+        for (let i = 0; i < bufferLength; i++) {
+          barHeight = dataArray[i] * (visualsCanvas.height / 255);
+          let y = visualsCanvas.height - barHeight;
+          visualsContext.lineTo(i * (visualsCanvas.width / bufferLength), y);
+        }
+        visualsContext.lineTo(visualsCanvas.width, visualsCanvas.height);
+        visualsContext.strokeStyle = 'rgb(0, 165, 255)'; // Farbe
+        visualsContext.stroke();
+
+      } else if (mode === 'waveform') {
+          // Wellenform
+           visualsContext.beginPath();
+          const sliceWidth = visualsCanvas.width * 1.0 / bufferLength;
+          let x = 0;
+
+          for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0; // Normalisieren (0-255 -> 0-2)
+            const y = v * visualsCanvas.height / 2;
+
+            if (i === 0) {
+              visualsContext.moveTo(x, y);
+            } else {
+              visualsContext.lineTo(x, y);
+            }
+            x += sliceWidth;
+          }
+          visualsContext.lineTo(visualsCanvas.width, visualsCanvas.height / 2); //Zur Mitte
+          visualsContext.strokeStyle = 'rgb(0, 165, 255)'; // Farbe
+          visualsContext.stroke();
+      }
+    }
+
+    // Event-Listener für den Visualisierungsmodus
+    if (visualsModeSelect) { //Stelle sicher, dass das Element existiert.
+      visualsModeSelect.addEventListener('change', () => {
+        if (visualsModeSelect.value !== 'off') {
+          // Starte die Visualisierung, falls sie nicht schon läuft
+          if (!isPlaying) {
+            togglePlayPause(); // Starte die Wiedergabe (und damit die Visualisierung)
+            // Keine zusätzliche Logik hier, da updateCursor die Visualisierung aktualisiert
+          }
+        }
+      });
+        // --- Export-Funktionen ---
+
+    async function exportProject() {
+        const exportFormat = exportFormatSelect.value;
+        const videoFormat = exportVideoButtonFormat.value; // Wert aus Auswahlfeld
+
+        // Setze Endzeit, falls nicht gesetzt (auf maximale Länge)
+        if (exportEndTime === 0) {
+            let maxDuration = 0;
+            for (const track of tracks) {
+                maxDuration = Math.max(maxDuration, track.startTime + track.duration);
+            }
+            exportEndTime = maxDuration;
+        }
+
+        exportProgress.style.display = "block"; // Fortschrittsanzeige ein
+        exportProgress.querySelector("progress").value = 0;
+        exportProgressSpan.textContent = "Exportiere...";
+        exportMessageDiv.textContent = ''; // Meldungen zurücksetzen
+
+        try {
+            if (exportFormat === 'mp4') {
+              // VIDEO-EXPORT mit ffmpeg.wasm
+              if (!ffmpeg || !ffmpeg.isLoaded()) {
+                alert("FFmpeg wird noch geladen oder ist nicht verfügbar. Bitte versuche es in Kürze erneut, oder verwende ein anderes Exportformat (WebM).");
+                exportProgress.style.display = "none"; // Fortschrittsanzeige ausblenden
+                return; // Abbruch
+              }
+              await exportVideoWithFFmpeg(exportStartTime, exportEndTime, videoFormat); // Aufruf
+
+
+            } else if (exportFormat === 'webm') {
+              // VIDEO-EXPORT (WebM direkt)
+              const videoBlob = await captureVideoFramesAsWebM(exportStartTime, exportEndTime);
+              const downloadLink = document.createElement('a');
+              downloadLink.href = URL.createObjectURL(videoBlob);
+              downloadLink.download = 'export.webm'; // Dateiname
+              downloadLink.click(); // Download auslösen
+              URL.revokeObjectURL(downloadLink.href);
+
+            } else if (exportFormat === 'mp3' || exportFormat === 'wav') {
+                // AUDIO-EXPORT
+                const audioBlob = await exportAudio(exportFormat, exportStartTime, exportEndTime);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(audioBlob);
+                downloadLink.download = `export.${exportFormat}`;
+                downloadLink.click();
+                URL.revokeObjectURL(downloadLink.href); // URL freigeben
+
+            } else if (exportFormat === 'jpeg' || exportFormat === 'png') {
+                // BILD-EXPORT
+                const imageBlob = exportImage(exportFormat);
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(imageBlob);
+                downloadLink.download = 'export.' + exportFormat;
+                downloadLink.click();
+                URL.revokeObjectURL(downloadLink.href);
+            }
+
+            exportProgress.querySelector("progress").value = 100; // Fortschritt auf 100%
+            exportProgressSpan.textContent = "Export abgeschlossen!";
+            setTimeout(() => { exportProgress.style.display = "none"; }, 2000); // Ausblenden
+
+        } catch (error) {
+            console.error("Fehler beim Export:", error);
+            alert("Fehler beim Export: " + error.message);
+            exportMessageDiv.textContent = "Export fehlgeschlagen: " + error.message;
+            exportProgress.style.display = "none"; // Fortschrittsanzeige ausblenden
+        }
+    }
+    //rendern der Videoframes für WebM
+    async function captureVideoFramesAsWebM(startTime = 0, endTime = null) {
+        return new Promise((resolve, reject) => {
+          // 1. Bestimme die Dimensionen und Framerate für den Export
+            const resolution = exportResolutionSelect.value.split('x');
+            const width = parseInt(resolution[0]);
+            const height = parseInt(resolution[1]);
+            const framerate = parseInt(exportFramerateSelect.value);
+
+            // 2. Erstelle ein Canvas-Element in der gewünschten Größe
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+
+            // 3. Erstelle einen MediaStream aus dem Canvas
+            const stream = canvas.captureStream(framerate);
+
+            // 4. Erstelle einen MediaRecorder
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' }); //VP9 Codec
+            let chunks = []; //Speichert die Daten
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data); //Daten hinzufügen
+                }
+            };
+
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: 'video/webm' });
+              resolve(blob); //Promise mit dem Blob als Ergebnis auflösen
+            };
+
+            recorder.onerror = (error) => {
+                console.error("Fehler beim Encodieren des Videos:", error);
+                reject(error); // Promise ablehnen, wenn Fehler auftritt
+            };
+            recorder.start();
+            // 5. Zeichne die Frames auf das Canvas (asynchron)
+            let currentTime = startTime;
+            const frameDuration = 1 / framerate;
+
+           function drawFrame() {
+              // Berechne die aktuelle Zeit relativ zum Startzeitpunkt des Exports.
+              let currentTime = startTime;
+              // Zeichne die Frames auf das Canvas (asynchron, mit requestAnimationFrame)
+              function drawFrame() {
+                // Berechne die aktuelle Zeit relativ zum Startzeitpunkt des Exports.
+                let currentTime = startTime; //Sicherstellen das alles bei 0 anfängt
+                //Zeichne aktuellen Frame
+                drawVideoFrame(context, width, height, currentTime);
+
+                currentTime += frameDuration; //Erhöhe Zeit
+
+                if (endTime !== null && currentTime < endTime) { //Prüfe, ob die Endzeit erreicht wurde
+                  // Fordere den nächsten Frame an, solange das Ende nicht erreicht ist
+                    requestAnimationFrame(drawFrame); // Nächsten Frame anfordern
+                } else {
+                  // Stoppe die Aufnahme, wenn das Ende erreicht ist
+                    recorder.stop();
+                }
+             }
+               drawFrame(); //Ersten Frame zeichnen
+           }
+           drawFrame(); // Starte die Zeichenschleife
+        });
+    }
+
+    function drawVideoFrame(context, width, height, currentTime) {
+      // Canvas leeren (wichtig, um vorherige Frames zu entfernen)
+      context.clearRect(0, 0, width, height);
+
+      // Zeichne alle *sichtbaren* Video- und Bildspuren
+      for (const track of tracks) {
+        if (track.type === 'video' || track.type === 'image') {
+          const trackStart = track.startTime;
+          const trackEnd = track.startTime + track.duration;
+          // Überprüfe, ob der aktuelle Zeitpunkt innerhalb der Spur liegt.
+          if (currentTime >= trackStart && currentTime <= trackEnd) {
+            const media = track.mediaElement;
+
+            // Berechne die Position und Größe für das Zeichnen (unter Berücksichtigung von Seitenverhältnis und 'object-fit')
+            let drawWidth = media.videoWidth || media.width; //  Breite (Video oder Bild)
+            let drawHeight = media.videoHeight || media.height;// Höhe
+            let x = 0;
+            let y = 0;
+
+            // Passe die Größe an, um das Seitenverhältnis beizubehalten,
+            // ähnlich wie object-fit: contain
+            const videoRatio = drawWidth / drawHeight;
+            const canvasRatio = width / height;
+
+            if (videoRatio > canvasRatio) {
+              // Video ist breiter als der Canvas
+              drawHeight = height;
+              drawWidth = height * videoRatio;
+              x = (width - drawWidth) / 2; // Zentrieren
+            } else {
+              // Video ist höher oder gleich breit wie der Canvas
+              drawWidth = width;
+              drawHeight = width / videoRatio;
+              y = (height - drawHeight) / 2; // Zentrieren
+            }
+
+            // Wende CSS-Filter an (Helligkeit, Kontrast, etc.)
+            context.filter = track.mediaElement.style.filter; // Übernimm CSS-Filter
+            // Zeichne das Video-/Bildelement auf den Canvas. Berücksichtige die aktuelle Zeit
+            context.drawImage(media, x, y, drawWidth, drawHeight);
+
+            // Setze den Filter *unbedingt* zurück, um andere Elemente nicht zu beeinflussen!
+            context.filter = 'none';
+          }
+        }
+      }
+    }
+
+    //Audio Exportieren
+    async function exportAudio(format, startTime = 0, endTime = null) {
+        if (tracks.length === 0) {
+            throw new Error('Keine Spuren zum Exportieren vorhanden.');
+        }
+
+        // 1. Bestimme die Länge des resultierenden Audiobuffers (in Samples)
+        let maxLength = 0;
+        for (const track of tracks) {
+            if (track.type === 'audio') {
+                const trackEndTime = track.startTime + track.duration;
+                maxLength = Math.max(maxLength, trackEndTime); // Maximum
+            }
+        }
+
+        // Berücksichtige den Export-Zeitbereich (startTime, endTime)
+        const actualEndTime = endTime !== null ? Math.min(endTime, maxLength) : maxLength;
+        const duration = Math.max(0, actualEndTime - startTime); // Sicherstellen: Nicht negativ
+
+
+        // 2. Erstelle einen OfflineAudioContext (für *alle* Spuren)
+        const offlineContext = new OfflineAudioContext(
+            2, // Anzahl der Kanäle (Stereo)
+            Math.floor(duration * audioContext.sampleRate), // Länge in Samples
+            audioContext.sampleRate // Gleiche Samplerate wie der originale Kontext
+        );
+
+        // 3. Verbinde alle Audiospuren mit dem OfflineAudioContext (und wende Effekte an!)
+        for (const track of tracks) {
+            if (track.type === 'audio' && track.audioBuffer) { // Nur Audiospuren
+                // Erstelle einen BufferSourceNode für den Track
+                const source = offlineContext.createBufferSource();
+                source.buffer = track.audioBuffer; // Verwende den *originalen* AudioBuffer
+
+                // Wende Effekte an (tiefe Kopie, um Original nicht zu verändern)
+                const gainNode = offlineContext.createGain();
+                const pannerNode = offlineContext.createStereoPanner();
+                const filterNode = offlineContext.createBiquadFilter(); //Hinzugefügt
+
+                // Verbinde die Nodes (in der richtigen Reihenfolge)
+                source.connect(gainNode);
+                gainNode.connect(pannerNode);
+                pannerNode.connect(filterNode);
+                filterNode.connect(offlineContext.destination);
+
+
+                // Werte setzen (aus track.effectValues)
+                gainNode.gain.value = track.effectValues.volume;
+                pannerNode.pan.value = track.effectValues.panning;
+                filterNode.type = track.effectValues.filterType;
+                filterNode.frequency.value = track.effectValues.filterCutoff;
+
+                // Berechne die Startzeit *relativ* zum Export-Startpunkt
+                let trackStartTime = track.startTime - startTime;
+                trackStartTime = Math.max(0, trackStartTime);      // Stelle sicher, dass sie nicht negativ ist
+
+                // Starte die Wiedergabe der Spur zum richtigen Zeitpunkt
+                source.start(trackStartTime);
+            }
+        }
+
+        // 4. Rendere den OfflineAudioContext (asynchron!)
+        return new Promise((resolve, reject) => {
+            offlineContext.startRendering().then(async (renderedBuffer) => { // Rendern starten
+
+                // 5. Konvertiere den gerenderten AudioBuffer in das gewünschte Format (WAV oder MP3)
+                let audioBlob;
+                if (format === 'wav') {
+                    audioBlob = await audioBufferToBlob(renderedBuffer, 'audio/wav');
+                } else if (format === 'mp3') {
+                    // MP3-Encoding im Web Worker (LAMEjs)
+                    audioWorker.postMessage({ type: 'encodeAudio', data: { audioBuffer: renderedBuffer, bitRate: parseInt(exportAudioBitrateSelect.value) } }); //bitRate
+
+                    audioBlob = await new Promise((resolveWorker, rejectWorker) => { //auf Worker warten
+                      audioWorker.onmessage = (event) => {
+                        if (event.data.type === 'mp3Blob') {
+                          resolveWorker(event.data.mp3Blob); // Bei Erfolg -> Promise auflösen
+                        } else if (event.data.type === 'error') {
+                          rejectWorker(new Error(event.data.message)); // Bei Fehler -> Promise ablehnen
+                        }
+                      };
+                       audioWorker.onerror = (error) => { // Fehler im Worker abfangen
+                            console.error("Worker error:", error);
+                            rejectWorker(error); // Fehler weiterleiten
+                        };
+                    });
+
+                } else {
+                    reject(new Error('Ungültiges Audioformat')); // Fehler, falls ungültiges Format
+                    return;
+                }
+              resolve(audioBlob);
+            }).catch(reject); // Fehler beim Rendern abfangen
+        });
+    }
+
+    // --- Export Image --- (Beispiel für aktuellen Frame)
+    function exportImage(format) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1920; //  Auflösung, anpassen
+      canvas.height = 1080;
+      const ctx = canvas.getContext('2d');
+
+      // Zeichne die *sichtbaren* Video- und Bildspuren auf das Canvas
+      for (const track of tracks) {
+        if ((track.type === 'video' || track.type === 'image') && track.mediaElement) {
+          //Berechne die Zeit
+          let currentTime = audioContext.currentTime;
+          const trackStart = track.startTime;
+          const trackEnd = track.startTime + track.duration;
+
+          if (currentTime >= trackStart && currentTime <= trackEnd) { //Wenn Zeit im Track liegt
+            // Einfache Zeichenoperation
+            ctx.drawImage(track.mediaElement, 0, 0, canvas.width, canvas.height); //Anpassen für Seitenverhältnis
+          }
+        }
+      }
+
+      // Canvas-Inhalt als Blob exportieren (JPEG oder PNG)
+      const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+      let quality = 0.9; //Qualität für jpeg
+      if (format === 'jpeg') {
+        return canvas.toBlob((blob) => {
+          resolve(blob);
+        }, mimeType, quality);
+      } else {
+        return canvas.toBlob((blob) => {
+          resolve(blob);
+        }, mimeType);
+      }
+    }
+
+    // --- Speichern und Laden ---
+    function saveProject() {
+      const projectData = {
+        tracks: tracks.map(track => ({
+          type: track.type,
+          src: track.src, // URL des Blobs im Browser
+          startTime: track.startTime,
+          duration: track.duration,
+          effectValues: track.effectValues, // Speichere *alle* Effekte!
+          audioBuffer: track.type === 'audio' ? { // Speichere AudioBuffer-Daten *separat*
+            numberOfChannels: track.audioBuffer.numberOfChannels,
+            length: track.audioBuffer.length,
+            sampleRate: track.audioBuffer.sampleRate,
+            channelData: Array.from({ length: track.audioBuffer.numberOfChannels }, (_, i) => Array.from(track.audioBuffer.getChannelData(i))),
+          } : null, // Keine Audiodaten für Video/Bild
+          muted: track.muted, //hinzugefügt
+          solo: track.solo, //hinzugefügt
+        })),
+        concertPitch: concertPitch,
+        zoomLevel: zoomLevel,
+        snapToGrid: snapToGrid,
+        // ... (weitere globale Einstellungen) ...
+      };
+
+      const projectJson = JSON.stringify(projectData);
+
+      // Download anbieten (als .esproj Datei)
+      const blob = new Blob([projectJson], { type: 'application/json' });
+      const downloadLink = document.createElement('a');
+      downloadLink.href = URL.createObjectURL(blob);
+      downloadLink.download = 'echoel-project.esproj'; // .esproj als Dateiendung
+      downloadLink.click();
+      URL.revokeObjectURL(downloadLink.href); // URL wieder freigeben
+    }
+
+    async function loadProject(event) {
+      const file = event.target.files[0];
+      if (!file) {
+        return;
+      }
+      if (file.name.split('.').pop() !== 'esproj') { //Dateiendung prüfen
+        alert('Ungültiges Dateiformat. Bitte eine .esproj Datei auswählen.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const projectData = JSON.parse(e.target.result);
+
+          // 1. Alles zurücksetzen (wichtig!)
+          clearTimeline();
+          resetGlobalSettings();
+
+          // 2. Globale Einstellungen wiederherstellen
+          concertPitch = projectData.concertPitch || 440;
+          concertPitchInput.value = concertPitch;
+          zoomLevel = projectData.zoomLevel || 1;
+          snapToGridCheckbox.checked = projectData.snapToGrid || false;
+
+          // 3. Spuren wiederherstellen (asynchron, da Blobs geladen werden müssen)
+          const loadPromises = projectData.tracks.map(trackData => {
+// worker.js
+
+// WICHTIG: Libraries im Worker importieren:
+importScripts("https://unpkg.com/@tonaljs/tonal@4.13.0/browser/tonal.min.js");
+importScripts("https://cdn.jsdelivr.net/npm/meyda@latest/dist/web/meyda.min.js");
+importScripts("https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js");
+
+self.onmessage = async (event) => {
+    const { type, data } = event.data;
+
+    if (type === 'detectKey') {
+        try {
+            const key = await detectKey(data.audioBuffer);
+            self.postMessage({ type: 'keyResult', key });
+        } catch (error) {
+            self.postMessage({ type: 'error', message: 'Fehler bei der Tonarterkennung: ' + error.message });
+        }
+    } else if (type === 'detectBPM') {
+        try {
+            const bpm = await detectBPM(data.audioBuffer);
+            self.postMessage({ type: 'bpmResult', bpm });
+        } catch (error) {
+            self.postMessage({ type: 'error', message: 'Fehler bei der BPM-Erkennung: ' + error.message });
+        }
+
+    } else if (type === 'encodeAudio') {
+        try {
+          const mp3Blob = encodeAudioToMp3(data.audioBuffer, data.bitRate);
+          self.postMessage({ type: 'mp3Blob', mp3Blob }); //Korrekter Typ
+        } catch (error) {
+          self.postMessage({ type: 'error', message: 'Fehler beim Encodieren zu MP3: ' + error.message });
+        }
+    } else if (type === 'audioBufferToBlob') {
+        try {
+            const blob = await audioBufferToBlob(data.audioBuffer, data.audioType);
+            self.postMessage({ type: 'blobData', blob }); // Korrekter Typ: blobData
+        } catch (error) {
+            self.postMessage({ type: 'error', message: 'Fehler beim Erstellen des Blobs: ' + error.message });
+        }
+    }
+};
+
+// --- Funktionsdefinitionen (innerhalb des Workers) ---
+
+async function detectKey(audioBuffer) {
+    // 1. Downsampling (optional, aber gut für Performance)
+    const offlineContext = new OfflineAudioContext(1, audioBuffer.length / 4, audioBuffer.sampleRate / 4);
+    const source = offlineContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineContext.destination);
+    source.start(0);
+    const downsampledBuffer = await offlineContext.startRendering();
+
+     // 2. Chromagramm berechnen (mit Tonal.js)
+    const chromagram = Tonal.Chroma.chroma(downsampledBuffer.getChannelData(0)); // Wir nehmen Kanal 0 an
+
+    // 3. Tonart erkennen (mit Tonal.js)
+    const key = Tonal.Key.detect(chromagram);
+      if(!key[0]){ //Überprüfen ob etwas erkannt wurde
+        return null // Wenn nicht Key zurückgeben
+      } else {
+        return key[0]; // gib das erste Resultat zurück.
+      }
+}
+
+async function detectBPM(audioBuffer) {
+    const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+    const source = offlineContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineContext.destination);
+    source.start();
+    const renderedBuffer = await offlineContext.startRendering(); //Audiobuffer wird gerendert
+
+    if (typeof Meyda === 'undefined') { // Fehlerbehandlung, falls Meyda nicht geladen wurde
+        console.error('Meyda is not loaded!');
+        return null; // Oder einen Standardwert
+    }
+
+    // Extrahiere die nötigen Features
+    const features = Meyda.extract(['amplitudeSpectrum', 'spectralCentroid'], renderedBuffer.getChannelData(0));
+
+     // Berechnung der BPM (Sehr vereinfacht, dient nur als Beispiel)
+    const bpmEstimates = [];
+    for (let i = 1; i < features.amplitudeSpectrum.length; i++) {
+        const diff = features.amplitudeSpectrum[i] - features.amplitudeSpectrum[i - 1]; //Differenz
+         if (diff > 0.1) { // Sehr grober Schwellenwert!
+            bpmEstimates.push(i);
+        }
+    }
+
+    let bpm = 0; //Initialwert
+    if (bpmEstimates.length > 1) {
+        const intervals = [];
+        for (let i = 1; i < bpmEstimates.length; i++) {
+            intervals.push(bpmEstimates[i] - bpmEstimates[i - 1]);
+        }
+
+        // Durchschnittliches Intervall berechnen
+        const averageInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length; //Durchschnitt
+
+        // BPM berechnen
+          bpm = 60 / (averageInterval * (renderedBuffer.length / renderedBuffer.sampleRate) / features.amplitudeSpectrum.length );
+    }
+
+    return bpm; // Rückgabe
+}
+
+//Audio zu mp3 encoden
+function encodeAudioToMp3(audioBuffer, bitRate) {
+    const mp3Encoder = new lamejs.Mp3Encoder(audioBuffer.    const mp3Encoder = new lamejs.Mp3Encoder(audioBuffer.numberOfChannels, audioBuffer.sampleRate, bitRate);
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null; //Wenn mehr als ein Kanal vorhanden ist, dann nehme auch den rechten Kanal
+    const samples = new Float32Array(left.length + (right ? right.length : 0)); //Erstelle Array in passender Länge
+
+    // Interleave-Format für Stereo (LRLRLR)
+    let offset = 0;
+    for (let i = 0; i < left.length; i++) {
+        samples[offset++] = left[i] * 0x7FFF; // Skalieren auf 16-Bit-Integer (-32768 bis 32767)
+        if (right) {
+            samples[offset++] = right[i] * 0x7FFF;
+        }
+    }
+
+    const mp3Data = [];
+    let mp3buf = mp3Encoder.encodeBuffer(samples); //Samples encoden
+     if (mp3buf.length > 0) {
+        mp3Data.push(mp3buf);
+    }
+    mp3buf = mp3Encoder.flush(); //Verbleibende Daten encoden
+    if (mp3buf.length > 0) {
+        mp3Data.push(mp3buf);
+    }
+
+
+    return new Blob(mp3Data, { type: 'audio/mp3' }); //Blob erstellen
+}
+
+//Audiobuffer zu Blob konvertieren
+async function audioBufferToBlob(audioBuffer, audioType) {
+  const numberOfChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const length = audioBuffer.length;
+
+  // Erstelle einen neuen OfflineAudioContext
+  const offlineContext = new OfflineAudioContext(numberOfChannels, length, sampleRate);
+
+  const bufferSource = offlineContext.createBufferSource(); //Quelle erstellen
+    bufferSource.buffer = audioBuffer;
+
+  // Verbinde den BufferSourceNode mit dem Ziel des OfflineAudioContext
+    bufferSource.connect(offlineContext.destination);
+    bufferSource.start();
+
+    // Rendere den OfflineAudioContext
+    return offlineContext.startRendering() //Gibt Promise zurück
+    .then(renderedBuffer => { //Wenn das Rendern abgeschlossen ist
+      // Hier den WAV-Blob erstellen (oder jeden anderen Codec/Container)
+      const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length); //Verwende die Hilfsfunktion
+      return wavBlob;
+
+    });
+}
+
+//Hilfsfunktion um Audiobuffer zu wav zu konvertieren
+function bufferToWave(abuffer, len) {
+    const numOfChan = abuffer.numberOfChannels;
+    const length = len * numOfChan * 2 + 44; //44 Header
+    const buffer = new ArrayBuffer(length); //Neuer Buffer
+    const view = new DataView(buffer); //DataView für binäre Daten
+    const channels = [];
+    let i;
+    let sample;
+    let offset = 0;
+    let pos = 0;
+
+    // Schreibe den WAV-Header (Details siehe: http://soundfile.sapp.org/doc/WaveFormat/)
+    setUint32(0x46464952); // "RIFF"
+    setUint32(length - 8); // Dateigröße - 8
+    setUint32(0x45564157); // "WAVE"
+
+    setUint32(0x20746d66); // "fmt " Chunk
+    setUint32(16); // Größe des fmt-Chunks
+    setUint16(1); // PCM-Format (1 = unkomprimiert)
+    setUint16(numOfChan);
+    setUint32(abuffer.sampleRate);
+    setUint32(abuffer.sampleRate * 2 * numOfChan); // Byte-Rate
+    setUint16(numOfChan * 2); // Block-Align
+    setUint16(16); // Bits pro Sample
+
+    setUint32(0x61746164); // "data" Chunk
+    setUint32(length - pos - 4); // Datenbereichsgröße
+
+    // Schreibe die Audiodaten
+    for (i = 0; i < abuffer.numberOfChannels; i++) {
+        channels.push(abuffer.getChannelData(i));
+    }
+
+    while (pos < length) {
+        for (i = 0; i < numOfChan; i++) {
+            // Interleave-Daten ( உதார: L-R-L-R...)
+            sample = Math.max(-1, Math.min(1, channels[i][offset])); // Clamp
+            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // Skalierung
+            view.setInt16(pos, sample, true); // Schreibe in Little-Endian
+            pos += 2;
+        }
+        offset++; // Nächster Frame
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+
+    function setUint16(data) {
+        view.setUint16(pos, data, true);
+        pos += 2;
+    }
+
+    function setUint32(data) {
+        view.setUint32(pos, data, true);
+        pos += 4;
+    }
+}
+
+
+
+
+
 
