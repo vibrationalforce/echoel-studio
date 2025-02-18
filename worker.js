@@ -31,13 +31,13 @@ self.onmessage = async (event) => {
       self.postMessage({ type: 'error', message: 'Fehler beim Encodieren zu MP3: ' + error.message });
     }
   } else if (type === 'audioBufferToBlob') {
-    try {
-      const blob = await audioBufferToBlob(data.audioBuffer, data.audioType);
-      self.postMessage({ type: 'blobData', blob });
-    } catch (error) {
-        self.postMessage({ type: 'error', message: 'Fehler beim Erstellen des Blobs: ' + error.message });
+        try {
+            const blob = await audioBufferToBlob(data.audioBuffer, data.audioType);
+            self.postMessage({ type: 'blobData', blob });
+        } catch (error) {
+            self.postMessage({ type: 'error', message: 'Fehler beim Erstellen des Blobs: ' + error.message });
+        }
     }
-  }
 };
 
 
@@ -81,12 +81,11 @@ async function detectBPM(audioBuffer) {
     // Extrahiere die nötigen Features
     const features = Meyda.extract(['amplitudeSpectrum', 'spectralCentroid'], renderedBuffer.getChannelData(0));
 
-     // Berechnung der BPM.  Diese Logik ist *sehr* vereinfacht und dient nur als Beispiel.
-    // Eine robuste BPM-Erkennung ist ein komplexes Thema!
+     // Berechnung der BPM (vereinfacht)
     const bpmEstimates = [];
     for (let i = 1; i < features.amplitudeSpectrum.length; i++) {
         const diff = features.amplitudeSpectrum[i] - features.amplitudeSpectrum[i - 1];
-         if (diff > 0.1) { // Sehr grober Schwellenwert für Onset!  Anpassen!
+         if (diff > 0.1) { // Sehr grober Schwellenwert!
             bpmEstimates.push(i);
         }
     }
@@ -97,11 +96,7 @@ async function detectBPM(audioBuffer) {
         for (let i = 1; i < bpmEstimates.length; i++) {
             intervals.push(bpmEstimates[i] - bpmEstimates[i - 1]);
         }
-
-        // Durchschnittliches Intervall berechnen
         const averageInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
-
-        // BPM berechnen (Formel anpassen, je nach Samplingrate und Frame-Größe von Meyda)
           bpm = 60 / (averageInterval * (renderedBuffer.length / renderedBuffer.sampleRate) / features.amplitudeSpectrum.length );
     }
 
@@ -157,7 +152,7 @@ async function audioBufferToBlob(audioBuffer, audioType) {
     // Rendere den OfflineAudioContext
     return offlineContext.startRendering()
     .then(renderedBuffer => {
-      // Hier den WAV-Blob erstellen (oder jeden anderen Codec/Container, den du verwenden möchtest)
+      // Hier den WAV-Blob erstellen (oder jeden anderen Codec/Container)
       const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length); //Verwende die Hilfsfunktion
       return wavBlob;
 
