@@ -4415,3 +4415,446 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const track of tracks) {
             if (
 
+            if (track.type === 'audio') { // Nur Audiospuren berücksichtigen
+                const trackEndTime = track.startTime + track.duration;
+                maxLength = Math.max(maxLength, trackEndTime);
+            }
+        }
+
+        // Berücksichtige den Export-Zeitbereich (startTime, endTime)
+        const actualEndTime = endTime !== null ? Math.min(endTime, maxLength) : maxLength; //Kleinster Wert
+        const duration = Math.max(0, actualEndTime - startTime); // Sicherstellen: Nicht negativ
+
+        // 2. Erstelle einen OfflineAudioContext (für *alle* Spuren)
+        const offlineContext = new OfflineAudioContext(
+            2, // Anzahl der Kanäle (Stereo) – Anpassen, falls nötig!
+            Math.floor(duration * audioContext.sampleRate), // Länge in Samples
+            audioContext.sampleRate // Gleiche Samplerate wie der originale Kontext
+        );
+
+        // 3. Verbinde alle Audiospuren mit dem OfflineAudioContext (und wende Effekte an!)
+        for (const track of tracks) {
+            if (track.type === 'audio' && track.audioBuffer) { // Stelle sicher, dass es ein Audio-Track ist
+                // Erstelle einen BufferSourceNode für den Track
+                const source = offlineContext.createBufferSource();
+                source.buffer = track.audioBuffer; // Verwende den *originalen* AudioBuffer
+
+                // Wende Effekte an (tiefe Kopie, um Original nicht zu verändern)
+                const gainNode = offlineContext.createGain();
+                const pannerNode = offlineContext.createStereoPanner();
+                const filterNode = offlineContext.createBiquadFilter(); //Hinzugefügt
+
+                // Verbinde die Nodes (in der richtigen Reihenfolge)
+                source.connect(gainNode);
+                gainNode.connect(pannerNode);
+                pannerNode.connect(filterNode)
+                filterNode.connect(offlineContext.destination);
+
+
+                // Werte setzen (aus track.effectValues)
+                gainNode.gain.value = track.effectValues.volume;
+                pannerNode.pan.value = track.effectValues.panning;
+                filterNode.type = track.effectValues.filterType;
+                filterNode.frequency.value = track.effectValues.filterCutoff;
+
+
+                // Berechne die Startzeit *relativ* zum Export-Startpunkt
+                let trackStartTime = track.startTime - startTime; // Differenz
+                trackStartTime = Math.max(0, trackStartTime);      // Stelle sicher, dass sie nicht negativ ist
+
+                // Starte die Wiedergabe der Spur zum richtigen Zeitpunkt
+                source.start(trackStartTime);
+            }
+        }
+
+        // 4. Rendere den OfflineAudioContext (asynchron!)
+        return new Promise((resolve, reject) => {
+            offlineContext.startRendering().then(async (renderedBuffer) => { // Rendern starten
+
+                // 5. Konvertiere den gerenderten AudioBuffer in das gewünschte Format (WAV oder MP3)
+                let audioBlob;
+                if (format === 'wav') {
+                    audioBlob = await audioBufferToBlob(renderedBuffer, 'audio/wav');
+                } else if (format === 'mp3') {
+                    // MP3-Encoding im Web Worker (LAMEjs)
+                    audioWorker.postMessage({ type: 'encodeAudio', data: { audioBuffer: renderedBuffer, bitRate: parseInt(exportAudioBitrateSelect.value) } }); //bitRate
+
+                    audioBlob = await new Promise((resolveWorker, rejectWorker) => { //auf Worker warten
+                      audioWorker.onmessage = (event) => {
+                        if (event.data.type === 'mp3Blob') {
+                          resolveWorker(event.data.mp3Blob); // Bei Erfolg -> Promise auflösen
+                        } else if (event.data.type === 'error') {
+                          rejectWorker(new Error(event.data.message)); // Bei Fehler -> Promise ablehnen
+                        }
+                      };
+                       audioWorker.onerror = (error) => { // Fehler im Worker abfangen
+                            console.error("Worker error:", error);
+                            rejectWorker(error); // Fehler weiterleiten
+                        };
+                    });
+
+                } else {
+                    reject(new Error('Ungültiges Audioformat')); // Fehler, falls ungültiges Format
+                    return;
+                }
+              resolve(audioBlob);
+            }).catch(reject); // Fehler beim Rendern abfangen
+        });
+    }
+
+     // --- Export Image --- (Beispiel für aktuellen Frame)
+    function exportImage(format) {
+        const canvas = document.createElement('canvas'); // Canvas erstellen
+        canvas.width = 1920; // Standardauflösung, anpassen
+        canvas.height = 1080;
+        const ctx = canvas.getContext('2d');
+
+        // Zeichne die *sichtbaren* Video- und Bildspuren auf das Canvas
+        for (const track of tracks) {
+            if ((track.type === 'video' || track.type === 'image') && track.mediaElement) {
+              //Berechne die Zeit
+              let currentTime = audioContext.currentTime;
+              const trackStart = track.startTime;
+              const trackEnd = track.startTime + track.duration;
+
+              if(currentTime >= trackStart && currentTime <= trackEnd){ //Wenn Zeit im Track liegt
+                // Einfache Zeichenoperation
+                ctx.drawImage(track.mediaElement, 0, 0, canvas.width, canvas.height); //Anpassen für Seitenverhältnis
+              }
+            }
+        }
+
+        // Canvas-Inhalt als Blob exportieren (JPEG oder PNG)
+        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        let quality = 0.9; //Qualität für jpeg
+        if(format === 'jpeg'){
+          return canvas.toBlob((blob) => {
+            resolve(blob);
+          }, mimeType, quality);
+        } else {
+          return canvas.toBlob((blob) => {
+            resolve(blob);
+          }, mimeType);
+        }
+    }
+
+    // --- Speichern und Laden ---
+    function saveProject() {
+        const projectData = {
+            tracks: tracks.map(track => ({
+                type: track.type,
+                src: track.src, // URL des Blobs im Browser
+                startTime: track.startTime,
+                duration: track.duration,
+                effectValues: track.effectValues, // Speichere *alle* Effekte!
+                audioBuffer: track.type === 'audio' ? { // Speichere AudioBuffer-Daten *separat*
+                    numberOfChannels: track.audioBuffer.numberOfChannels,
+                    length: track.audioBuffer.length,
+                    sampleRate: track.audioBuffer.sampleRate,
+                    channelData: Array.from({ length: track.audioBuffer.numberOfChannels }, (_, i) => Array.from(track.audioBuffer.getChannelData(i))),
+                } : null, // Keine Audiodaten für Video/Bild
+                muted: track.muted, //hinzugefügt
+                solo: track.solo, //hinzugefügt
+            })),
+            concertPitch: concertPitch,
+            zoomLevel: zoomLevel,
+            snapToGrid: snapToGrid,
+            // ... (weitere globale Einstellungen) ...
+        };
+
+        const projectJson = JSON.stringify(projectData);
+
+        // Download anbieten (als .esproj Datei)
+        const blob = new Blob([projectJson], { type: 'application/json' });
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(blob);
+        downloadLink.download = 'echoel-project.esproj'; // .esproj als Dateiendung
+        downloadLink.click();
+        URL.revokeObjectURL(downloadLink.href); // URL wieder freigeben
+    }
+
+    async function loadProject(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+          if (file.name.split('.').pop() !== 'esproj') { //Dateiendung prüfen
+            alert('Ungültiges Dateiformat. Bitte eine .esproj Datei auswählen.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const projectData = JSON.parse(e.target.result);
+
+                // 1. Alles zurücksetzen (wichtig!)
+                clearTimeline();
+                resetGlobalSettings();
+
+                // 2. Globale Einstellungen wiederherstellen
+                concertPitch = projectData.concertPitch || 440;
+                concertPitchInput.value = concertPitch;
+                zoomLevel = projectData.zoomLevel || 1;
+                snapToGridCheckbox.checked = projectData.snapToGrid || false;
+
+                // 3. Spuren wiederherstellen (asynchron, da Blobs geladen werden müssen)
+                const loadPromises = projectData.tracks.map(trackData => {
+                    return getBlobFromUrl(trackData.src) // Blob laden
+                        .then(blob => {
+                            if (!blob) {
+                                console.error("Blob konnte nicht wiederhergestellt werden:", trackData.src);
+                                // Fehlerbehandlung: Benutzer informieren, Datei neu auswählen lassen, etc.
+                                return; // Fehler, aber weiter mit den anderen Spuren
+                            }
+
+                          // Erstelle ein File-Objekt aus dem Blob (für Kompatibilität mit addMediaToTimeline)
+                           const file = new File([blob], "media-file", { type: blob.type });
+
+                            // Füge die Spur hinzu *ohne* erneutes Laden der Metadaten (die sind ja schon in trackData)
+                            if (trackData.type === 'audio') {
+                                // Erstelle AudioBuffer *synchron* aus den gespeicherten Daten (falls vorhanden)
+                                let audioBuffer = null;
+                                if (trackData.audioBuffer) {
+                                    audioBuffer = audioContext.createBuffer(
+                                        trackData.audioBuffer.numberOfChannels,
+                                        trackData.audioBuffer.length,
+                                        trackData.audioBuffer.sampleRate
+                                    );
+                                    for (let i = 0; i < trackData.audioBuffer.numberOfChannels; i++) {
+                                        audioBuffer.getChannelData(i).set(trackData.audioBuffer.channelData[i]);
+                                    }
+                                }
+                                addMediaToTimeline(file, 'audio', audioBuffer, trackData);
+                            } else {
+                                addMediaToTimeline(file, trackData.type, null, trackData); // Kein AudioBuffer für Video/Bild
+                            }
+                        });
+                });
+
+                // Warten, bis *alle* Spuren geladen wurden
+                Promise.all(loadPromises).then(() => {
+                    // UI aktualisieren (Zoom, Auswahl, etc.)
+                    updateZoom();
+                    updateTrackControls(); // Zeige die Einstellungen der ersten ausgewählten Spur an (falls vorhanden)
+                     editorSection.style.display = 'block'; // Editor-Sektion anzeigen
+                     exportSection.style.display = 'block';
+                });
+              //Fehler fangen
+            } catch (error) {
+                console.error("Fehler beim Laden des Projekts:", error);
+                alert("Fehler beim Laden des Projekts. Die Datei ist möglicherweise beschädigt oder hat ein ungültiges Format.");
+            }
+        };
+        reader.readAsText(file); // JSON-Datei als Text lesen
+    }
+
+    // Hilfsfunktion: Timeline leeren, bevor ein neues Projekt geladen wird
+    function clearTimeline() {
+      //DOM-Elemente entfernen
+      audioTracksContainer.innerHTML = '';
+      videoTracksContainer.innerHTML = '';
+      imageTracksContainer.innerHTML = '';
+
+
+      // Wavesurfer-Instanzen zerstören
+      for(const trackId in wavesurferInstances){
+        if(wavesurferInstances.hasOwnProperty(trackId)){
+          wavesurferInstances[trackId].destroy();
+        }
+      }
+      wavesurferInstances = {};
+
+       // URLs freigeben (Speicherleck verhindern!)
+        for (const track of tracks) {
+            URL.revokeObjectURL(track.src);
+        }
+
+      tracks = []; //Leere Tracks
+      currentTrackId = 0; // ID zurücksetzen
+      selectedTracks = [];   // Auswahl zurücksetzen
+    }
+
+    // Hilfsfunktion: Globale Einstellungen zurücksetzen
+    function resetGlobalSettings() {
+        concertPitch = 440;
+        concertPitchInput.value = concertPitch;
+        zoomLevel = 1;
+        snapToGridCheckbox.checked = false;
+        // ... (weitere Einstellungen) ...
+    }
+
+    // --- Teilen von Projekten ---
+    function shareProject() {
+        // Speichere das Projekt (wie in saveProject)
+        const projectData = {
+             tracks: tracks.map(track => ({
+                type: track.type,
+                src: track.src, // URL des Blobs im Browser
+                startTime: track.startTime,
+                duration: track.duration,
+                effectValues: track.effectValues, // Speichere *alle* Effekte!
+                audioBuffer: track.type === 'audio' ? { // Speichere AudioBuffer-Daten *separat*
+                    numberOfChannels: track.audioBuffer.numberOfChannels,
+                    length: track.audioBuffer.length,
+                    sampleRate: track.audioBuffer.sampleRate,
+                    channelData: Array.from({ length: track.audioBuffer.numberOfChannels }, (_, i) => Array.from(track.audioBuffer.getChannelData(i))),
+                } : null, // Keine Audiodaten für Video/Bild
+                 muted: track.muted, //hinzugefügt
+                solo: track.solo, //hinzugefügt
+            })),
+            concertPitch: concertPitch,
+            zoomLevel: zoomLevel,
+            snapToGrid: snapToGrid,
+            // ... (weitere globale Einstellungen) ...
+        };
+
+        const projectJson = JSON.stringify(projectData);
+
+        // Erstelle einen Blob aus den JSON-Daten.
+        const blob = new Blob([projectJson], { type: 'application/json' });
+
+        // Erstelle eine temporäre URL für den Blob.
+        const url = URL.createObjectURL(blob);
+
+        // Erstelle einen Link, der die URL als Parameter enthält (mit window.location)
+        const shareLink = window.location.origin + window.location.pathname + '?project=' + encodeURIComponent(url);
+
+        // Kopiere den Link in die Zwischenablage (mit navigator.clipboard)
+        navigator.clipboard.writeText(shareLink).then(() => {
+            alert('Projekt-Link in die Zwischenablage kopiert. Teile diesen Link, um das Projekt zu laden.');
+        }).catch(err => {
+            console.error('Fehler beim Kopieren in die Zwischenablage:', err);
+            alert('Fehler beim Kopieren des Links. Bitte manuell kopieren.'); // Bessere Fehlermeldung
+            // Optional: Link in einem Textfeld anzeigen, damit der Benutzer ihn manuell kopieren kann
+        });
+      //URL wieder freigeben!
+       URL.revokeObjectURL(url);
+    }
+
+    // --- Laden von Projekten über URL-Parameter ---
+    function loadProjectFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectUrl = urlParams.get('project');
+
+        if (projectUrl) {
+          fetch(projectUrl)
+          .then(response => {
+            if(!response.ok){ // Fehlerbehandlung, falls die Antwort nicht ok ist.
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(projectData => {
+             //Verarbeite die Projektdaten, stelle Spuren wieder her usw.
+              clearTimeline();
+              resetGlobalSettings();
+
+              concertPitch = projectData.concertPitch || 440;
+              concertPitchInput.value = concertPitch;
+              zoomLevel = projectData.zoomLevel || 1;
+              snapToGridCheckbox.checked = projectData.snapToGrid || false;
+
+               const loadPromises = projectData.tracks.map(trackData => {
+                    return getBlobFromUrl(trackData.src) // Blob laden
+                        .then(blob => {
+                            if (!blob) {
+                                console.error("Blob konnte nicht wiederhergestellt werden:", trackData.src);
+                                // Fehlerbehandlung: Benutzer informieren, Datei neu auswählen lassen, etc.
+                                return; // Fehler, aber weiter mit den anderen Spuren
+                            }
+
+                          // Erstelle ein File-Objekt aus dem Blob (für Kompatibilität mit addMediaToTimeline)
+                           const file = new File([blob], "media-file", { type: blob.type });
+
+                            // Füge die Spur hinzu *ohne* erneutes Laden der Metadaten (die sind ja schon in trackData)
+                            if (trackData.type === 'audio') {
+                                // Erstelle AudioBuffer *synchron* aus den gespeicherten Daten (falls vorhanden)
+                                let audioBuffer = null;
+                                if (trackData.audioBuffer) {
+                                    audioBuffer = audioContext.createBuffer(
+                                        trackData.audioBuffer.numberOfChannels,
+                                        trackData.audioBuffer.length,
+                                        trackData.audioBuffer.sampleRate
+                                    );
+                                    for (let i = 0; i < trackData.audioBuffer.numberOfChannels; i++) {
+                                        audioBuffer.getChannelData(i).set(trackData.audioBuffer.channelData[i]);
+                                    }
+                                }
+                                addMediaToTimeline(file, 'audio', audioBuffer, trackData);
+                            } else {
+                                addMediaToTimeline(file, trackData.type, null, trackData); // Kein AudioBuffer für Video/Bild
+                            }
+                        });
+                });
+
+                // Warten, bis *alle* Spuren geladen wurden
+                Promise.all(loadPromises).then(() => {
+
+                    updateZoom();  // Zoom anpassen
+                    update
+                    updateTrackControls(); // Zeige die Einstellungen der ersten ausgewählten Spur an.
+                     editorSection.style.display = 'block'; // Editor-Sektion anzeigen
+                     exportSection.style.display = 'block';
+                });
+            })
+            .catch(error => { // Fehlerbehandlung
+                console.error("Fehler beim Laden des Projekts von URL:", error);
+                alert("Fehler beim Laden des Projekts von der URL.");
+            });
+    }
+}
+
+    // --- Initialisierung der Export-Optionen ---
+    function initializeExportOptions() {
+      // Auflösungen (Beispiele - anpassen!)
+      const resolutions = [
+        { width: 1280, height: 720, label: "720p (HD)" },
+        { width: 1920, height: 1080, label: "1080p (Full HD)" },
+        { width: 3840, height: 2160, label: "4K (Ultra HD)" },
+        { width: 640, height: 480, label: "640x480 (SD)" }, // Standard Definition
+        { width: 854, height: 480, label: "480p (SD)" },   // 16:9 SD
+      ];
+
+      // Framerates (Beispiele)
+      const framerates = [24, 30, 60, 29.97, 59.94];
+
+      // Audio-Bitrates (Beispiele)
+      const bitrates = [
+        { value: 128000, label: "128 kbps" },
+        { value: 192000, label: "192 kbps" },
+        { value: 320000, label: "320 kbps" },
+      ];
+
+      // Optionen zu den Select-Elementen hinzufügen
+      for (const res of resolutions) {
+        const option = document.createElement('option');
+        option.value = `${res.width}x${res.height}`;
+        option.textContent = `${res.label} (${res.width}x${res.height})`;
+        exportResolutionSelect.appendChild(option);
+      }
+
+      for (const fps of framerates) {
+        const option = document.createElement('option');
+        option.value = fps;
+        option.textContent = `${fps} fps`;
+        exportFramerateSelect.appendChild(option);
+      }
+      for (const rate of bitrates) {
+        const option = document.createElement('option');
+        option.value = rate.value;
+        option.textContent = `${rate.label}`;
+        exportAudioBitrateSelect.appendChild(option)
+      }
+    }
+     //Debounce Funktion, damit Events nicht zu oft ausgelöst werden
+    function debounce(func, wait) {
+      let timeout;
+      return function(...args) { //Rest Parameter
+        const context = this;
+        clearTimeout(timeout); //Wenn die Funktion wieder aufgerufen wird, wird der alte Timeout gelöscht
+        timeout = setTimeout(() => func.apply(context, args), wait); //Neuer Timeout
+      };
+    }
+    // --- Ende script.js ---
+});
