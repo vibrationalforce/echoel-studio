@@ -4016,4 +4016,402 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+    // --- Timeline-Interaktion (Klicken) ---
+
+    timeline.addEventListener('click', handleTimelineClick);
+
+    function handleTimelineClick(event) {
+        // Berechne die Klickposition relativ zur Timeline
+        const timelineRect = timeline.getBoundingClientRect();
+        const clickX = event.clientX - timelineRect.left;
+
+        // Umrechnung von Pixeln in Sekunden (unter Berücksichtigung des Zoom-Levels)
+        const clickTime = clickX / (50 * zoomLevel);
+
+        // Setze die Abspielposition im AudioContext
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().then(() => { // Context fortsetzen, falls angehalten
+                audioContext.currentTime = clickTime;
+            });
+        } else {
+            audioContext.currentTime = clickTime; // Zeit setzen
+        }
+
+        // Bewege den Cursor an die neue Position (visuell)
+        cursor.style.left = `${clickX}px`;
+
+        // Starte die Wiedergabe, falls nicht schon aktiv
+        if (!isPlaying) {
+            togglePlayPause();
+        }
+    }
+
+
+    // --- Drag & Drop (Verschieben von Spuren) ---
+
+    let draggedTrack = null; // Das aktuell gezogene Track-Objekt
+
+    function handleDragStart(event) {
+        const trackId = parseInt(event.target.dataset.trackId);
+        draggedTrack = tracks.find(t => t.id === trackId);
+
+        if (!draggedTrack) {
+            event.preventDefault(); // Verhindere das Ziehen, wenn kein Track gefunden
+            return;
+        }
+
+        event.dataTransfer.setData('text/plain', trackId); // ID für den Drop-Event
+        event.target.classList.add('dragging'); // Visuelles Feedback (CSS-Klasse)
+    }
+
+
+    function handleDragOver(event) {
+        event.preventDefault();  // Erlaube das Droppen (Standardverhalten verhindern)
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+      if (!draggedTrack) return;
+
+      const trackId = parseInt(event.dataTransfer.getData('text/plain'));
+      if (isNaN(trackId)) return; // Stelle sicher, dass die ID eine Zahl ist.
+
+      const dropTarget = event.target.closest('.timeline');
+      if (!dropTarget) {
+        draggedTrack.element.classList.remove('dragging');
+        draggedTrack = null;
+        return; //Frühzeitiger Abbruch
+      }
+
+      // Berechne die neue Startzeit basierend auf der Mausposition (relativ zur Timeline)
+      const timelineRect = timeline.getBoundingClientRect();
+      let newStartTime = (event.clientX - timelineRect.left) / (50 * zoomLevel);
+
+      // Einrasten am Raster (optional)
+      if (snapToGrid) {
+        newStartTime = Math.round(newStartTime / 0.5) * 0.5; //  0.5 Sekunden Raster
+      }
+        newStartTime = Math.max(0, newStartTime); //Keine Negativen Zeiten
+
+      // Aktualisiere die Startzeit des Tracks
+      draggedTrack.startTime = newStartTime;
+      updateTrackDisplay(draggedTrack); // Neuzeichnen
+
+        draggedTrack.element.classList.remove('dragging');
+        draggedTrack = null; // Zurücksetzen
+        saveStateForUndo(); // Zustand speichern
+    }
+
+
+    // --- Audio-Analyse (Tonart, BPM, Kammerton) ---
+    //Aufruf über Web Worker
+    function detectKey(audioBuffer) {
+        audioWorker.postMessage({ type: 'detectKey', data: { audioBuffer } });
+    }
+
+    function detectBPM(audioBuffer) {
+        audioWorker.postMessage({ type: 'detectBPM', data: { audioBuffer } });
+    }
+
+    function detectConcertPitch() {
+        analyser.getByteFrequencyData(dataArray); // Daten in das Array kopieren
+
+        let maxIndex = 0;
+        let maxValue = 0;
+        for (let i = 0; i < bufferLength; i++) {
+            if (dataArray[i] > maxValue) {
+                maxValue = dataArray[i];
+                maxIndex = i;
+            }
+        }
+
+        const frequency = maxIndex * audioContext.sampleRate / analyser.fftSize;
+        alert(`Geschätzter Kammerton: ${frequency.toFixed(1)} Hz`); // Ausgabe
+        concertPitchInput.value = frequency.toFixed(1); //Eingabefeld
+    }
+
+    function updateConcertPitch() {
+      const newPitch = parseFloat(concertPitchInput.value);
+      if (!isNaN(newPitch) && newPitch >= 400 && newPitch <= 480) {
+        concertPitch = newPitch;
+        localStorage.setItem('concertPitch', concertPitch); // Speichern
+      } else {
+        alert("Ungültiger Kammerton. Bitte einen Wert zwischen 400 und 480 Hz eingeben.");
+        concertPitchInput.value = concertPitch; // Zurücksetzen
+      }
+    }
+
+    // --- Visualisierung ---
+    function renderVisuals() {
+        if (!visualsContext) return; // Keine Canvas vorhanden, Abbruch
+
+        const mode = visualsModeSelect.value;
+
+        visualsContext.clearRect(0, 0, visualsCanvas.width, visualsCanvas.height); // Löschen
+
+        if (mode === 'off') return; // Visualisierung deaktiviert
+
+        if (mode === 'bars' || mode === 'spectrum') {
+            analyser.getByteFrequencyData(dataArray); // Frequenzdaten
+        } else if (mode === 'waveform') {
+            analyser.getByteTimeDomainData(dataArray); // Zeitdaten (Wellenform)
+        }
+
+        const barWidth = (visualsCanvas.width / bufferLength) * 2.5;
+        let barHeight;
+        let x = 0;
+
+        if (mode === 'bars') {
+            // Balkenanzeige
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i] * (visualsCanvas.height / 255); // Skalierung (0-255)
+                const r = barHeight + (25 * (i / bufferLength)); // Rot-Anteil
+                const g = 250 * (i / bufferLength);                // Grün-Anteil
+                const b = 50;                                     // Blau-Anteil
+                visualsContext.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                visualsContext.fillRect(x, visualsCanvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        } else if (mode === 'spectrum') {
+          // Spektralanzeige
+            visualsContext.beginPath();
+            visualsContext.moveTo(0, visualsCanvas.height);
+            for (let i = 0; i < bufferLength; i++) {
+              barHeight = dataArray[i] * (visualsCanvas.height / 255);
+              let y = visualsCanvas.height - barHeight; // Invertieren
+              visualsContext.lineTo(i * (visualsCanvas.width / bufferLength), y);
+           }
+             visualsContext.lineTo(visualsCanvas.width, visualsCanvas.height); //  rechten unteren Ecke
+            visualsContext.strokeStyle = 'rgb(0, 165, 255)'; // Farbe
+            visualsContext.stroke();
+        } else if (mode === 'waveform') {
+            // Wellenform
+             visualsContext.beginPath();
+            const sliceWidth = visualsCanvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0; // Normalisieren (0-255 -> 0-2)
+                const y = v * visualsCanvas.height / 2;
+
+                if (i === 0) {
+                    visualsContext.moveTo(x, y);
+                } else {
+                    visualsContext.lineTo(x, y);
+                }
+                x += sliceWidth;
+            }
+             visualsContext.lineTo(visualsCanvas.width, visualsCanvas.height / 2); //Zur Mitte
+            visualsContext.strokeStyle = 'rgb(0, 165, 255)'; // Farbe
+            visualsContext.stroke();
+        }
+    }
+
+    // Event-Listener für den Visualisierungsmodus
+    if (visualsModeSelect) {
+      visualsModeSelect.addEventListener('change', () => {
+        if (visualsModeSelect.value !== 'off') {
+          // Starte Visualisierung, falls noch nicht geschehen
+          if (!isPlaying) {
+            togglePlayPause(); // Starte die Wiedergabe
+          }
+        }
+      });
+    }
+
+    // --- Export-Funktionen ---
+    async function exportProject() {
+        const exportFormat = exportFormatSelect.value;
+        const videoFormat = exportVideoButtonFormat.value; // Wert aus Auswahlfeld
+
+        // Setze Endzeit, falls nicht gesetzt (auf maximale Länge)
+        if (exportEndTime === 0) {
+            let maxDuration = 0;
+            for (const track of tracks) {
+                maxDuration = Math.max(maxDuration, track.startTime + track.duration);
+            }
+            exportEndTime = maxDuration;
+        }
+
+        exportProgress.style.display = "block";
+        exportProgress.querySelector("progress").value = 0;
+        exportProgressSpan.textContent = "Exportiere...";
+        exportMessageDiv.textContent = ''; // Meldungen zurücksetzen
+
+        try {
+            if (exportFormat === 'mp4') {
+                // VIDEO-EXPORT mit ffmpeg.wasm
+                if (!ffmpeg || !ffmpeg.isLoaded()) { // Prüfe ob FFmpeg bereit ist
+                    alert("FFmpeg wird noch geladen oder ist nicht verfügbar. Bitte versuche es in Kürze erneut, oder verwende ein anderes Exportformat (WebM).");
+                    exportProgress.style.display = "none"; // Fortschrittsanzeige ausblenden
+                    return; // Abbruch
+                }
+                await exportVideoWithFFmpeg(exportStartTime, exportEndTime, videoFormat); // Aufruf
+
+
+            } else if (exportFormat === 'webm') {
+              // VIDEO-EXPORT (WebM direkt)
+                const videoBlob = await captureVideoFramesAsWebM(exportStartTime, exportEndTime); // Funktion von vorher
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(videoBlob);
+                downloadLink.download = 'export.webm'; // Dateiname
+                downloadLink.click(); // Download auslösen
+                 URL.revokeObjectURL(downloadLink.href); // URL freigeben
+
+            } else if (exportFormat === 'mp3' || exportFormat === 'wav') {
+                // AUDIO-EXPORT
+                const audioBlob = await exportAudio(exportFormat, exportStartTime, exportEndTime);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(audioBlob);
+                downloadLink.download = `export.${exportFormat}`; // Dateiendung (.mp3 oder .wav)
+                downloadLink.click();
+                URL.revokeObjectURL(downloadLink.href);
+
+            } else if (exportFormat === 'jpeg' || exportFormat === 'png') {
+                // BILD-EXPORT (vereinfacht, nimmt aktuellen Frame)
+                const imageBlob = exportImage(exportFormat);
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(imageBlob);
+                downloadLink.download = 'export.' + exportFormat; // Dateiendung
+                downloadLink.click();
+                URL.revokeObjectURL(downloadLink.href);
+
+            }
+
+            exportProgress.querySelector("progress").value = 100; // Fortschritt auf 100%
+            exportProgressSpan.textContent = "Export abgeschlossen!";
+            setTimeout(() => { exportProgress.style.display = "none"; }, 2000); // Ausblenden
+
+        } catch (error) {
+            console.error("Fehler beim Export:", error);
+            alert("Fehler beim Export: " + error.message);
+            exportMessageDiv.textContent = "Export fehlgeschlagen: " + error.message; // Detailliertere Meldung
+            exportProgress.style.display = "none";
+        }
+    }
+    //rendern der Videoframes für WebM
+    async function captureVideoFramesAsWebM(startTime = 0, endTime = null) {
+        return new Promise((resolve, reject) => {
+          // 1. Bestimme die Dimensionen und Framerate für den Export
+            const resolution = exportResolutionSelect.value.split('x');
+            const width = parseInt(resolution[0]);
+            const height = parseInt(resolution[1]);
+            const framerate = parseInt(exportFramerateSelect.value);
+
+            // 2. Erstelle ein Canvas-Element in der gewünschten Größe
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+
+            // 3. Erstelle einen MediaStream aus dem Canvas
+            const stream = canvas.captureStream(framerate);
+
+            // 4. Erstelle einen MediaRecorder
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' }); //VP9 Codec
+            let chunks = []; //Speichert die Daten
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data); //Daten hinzufügen
+                }
+            };
+
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: 'video/webm' });
+              resolve(blob); //Promise mit dem Blob als Ergebnis auflösen
+            };
+
+            recorder.onerror = (error) => {
+                console.error("Fehler beim Encodieren des Videos:", error);
+                reject(error); // Promise ablehnen, wenn Fehler auftritt
+            };
+            recorder.start();
+            // 5. Zeichne die Frames auf das Canvas (asynchron)
+            let currentTime = startTime;
+            const frameDuration = 1 / framerate;
+
+           function drawFrame() {
+              // Berechne die aktuelle Zeit relativ zum Startzeitpunkt des Exports.
+              let currentTime = startTime;
+              // Zeichne die Frames auf das Canvas (asynchron, mit requestAnimationFrame)
+              function drawFrame() {
+                // Berechne die aktuelle Zeit relativ zum Startzeitpunkt des Exports.
+                let currentTime = startTime; //Sicherstellen das alles bei 0 anfängt
+                //Zeichne aktuellen Frame
+                drawVideoFrame(context, width, height, currentTime);
+
+                currentTime += frameDuration; //Erhöhe Zeit
+
+                if (endTime !== null && currentTime < endTime) { //Prüfe, ob die Endzeit erreicht wurde
+                  // Fordere den nächsten Frame an, solange das Ende nicht erreicht ist
+                    requestAnimationFrame(drawFrame); // Nächsten Frame anfordern
+                } else {
+                  // Stoppe die Aufnahme, wenn das Ende erreicht ist
+                    recorder.stop();
+                }
+             }
+               drawFrame(); //Ersten Frame zeichnen
+           }
+           drawFrame(); // Starte die Zeichenschleife
+        });
+    }
+
+    function drawVideoFrame(context, width, height, currentTime) {
+      // Canvas leeren
+        context.clearRect(0, 0, width, height);
+
+        // Zeichne alle sichtbaren Video- und Bildspuren
+        for (const track of tracks) {
+            if (track.type === 'video' || track.type === 'image') {
+               const trackStart = track.startTime;
+               const trackEnd = track.startTime + track.duration;
+                // Überprüfen, ob aktueller Zeitpunkt innerhalb der Spur liegt.
+              if(currentTime >= trackStart && currentTime <= trackEnd){
+                const media = track.mediaElement;
+
+                // Berechne die Position und Größe für das Zeichnen
+                let drawWidth = media.videoWidth || media.width; //  Breite
+                let drawHeight = media.videoHeight || media.height;// Höhe
+                let x = 0;
+                let y = 0;
+
+                // Passe die Größe an, um das Seitenverhältnis beizubehalten,
+                const videoRatio = drawWidth / drawHeight;
+                const canvasRatio = width / height;
+
+                if (videoRatio > canvasRatio) {
+                    // Video ist breiter als der Canvas
+                    drawHeight = height;
+                    drawWidth = height * videoRatio;
+                    x = (width - drawWidth) / 2; // Zentrieren
+                } else {
+                    // Video ist höher oder gleich breit wie der Canvas
+                    drawWidth = width;
+                    drawHeight = width / videoRatio;
+                    y = (height - drawHeight) / 2; // Zentrieren
+                }
+
+                // Wende CSS-Filter an (Helligkeit, Kontrast, etc.)
+                context.filter = track.mediaElement.style.filter;
+                // Zeichne das Video-/Bildelement auf den Canvas.
+                context.drawImage(media, x, y, drawWidth, drawHeight);
+
+                // Setze den Filter zurück, um andere Elemente nicht zu beeinflussen
+                context.filter = 'none';
+              }
+            }
+        }
+    }
+
+    async function exportAudio(format, startTime = 0, endTime = null) {
+        if (tracks.length === 0) {
+            throw new Error('Keine Spuren zum Exportieren vorhanden.'); // Sinnvolle Fehlermeldung
+        }
+
+        // 1. Bestimme die Länge des resultierenden Audiobuffers (in Samples)
+        let maxLength = 0;
+        for (const track of tracks) {
+            if (
 
