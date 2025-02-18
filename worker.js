@@ -35,7 +35,7 @@ self.onmessage = async (event) => {
       const blob = await audioBufferToBlob(data.audioBuffer, data.audioType);
       self.postMessage({ type: 'blobData', blob });
     } catch (error) {
-      self.postMessage({ type: 'error', message: 'Fehler beim Erstellen des Blobs: ' + error.message });
+        self.postMessage({ type: 'error', message: 'Fehler beim Erstellen des Blobs: ' + error.message });
     }
   }
 };
@@ -65,12 +65,13 @@ async function detectKey(audioBuffer) {
 }
 
 async function detectBPM(audioBuffer) {
-    const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
-    const source = offlineContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(offlineContext.destination);
-    source.start();
-    const renderedBuffer = await offlineContext.startRendering();
+  const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+  const source = offlineContext.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineContext.destination);
+  source.start();
+  const renderedBuffer = await offlineContext.startRendering();
+
 
     if (typeof Meyda === 'undefined') {
         console.error('Meyda is not loaded!');
@@ -80,11 +81,12 @@ async function detectBPM(audioBuffer) {
     // Extrahiere die nötigen Features
     const features = Meyda.extract(['amplitudeSpectrum', 'spectralCentroid'], renderedBuffer.getChannelData(0));
 
-    // Berechnung der BPM (vereinfacht)
+     // Berechnung der BPM.  Diese Logik ist *sehr* vereinfacht und dient nur als Beispiel.
+    // Eine robuste BPM-Erkennung ist ein komplexes Thema!
     const bpmEstimates = [];
     for (let i = 1; i < features.amplitudeSpectrum.length; i++) {
         const diff = features.amplitudeSpectrum[i] - features.amplitudeSpectrum[i - 1];
-        if (diff > 0.1) { // Sehr grober Schwellenwert!
+         if (diff > 0.1) { // Sehr grober Schwellenwert für Onset!  Anpassen!
             bpmEstimates.push(i);
         }
     }
@@ -95,7 +97,11 @@ async function detectBPM(audioBuffer) {
         for (let i = 1; i < bpmEstimates.length; i++) {
             intervals.push(bpmEstimates[i] - bpmEstimates[i - 1]);
         }
+
+        // Durchschnittliches Intervall berechnen
         const averageInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+
+        // BPM berechnen (Formel anpassen, je nach Samplingrate und Frame-Größe von Meyda)
           bpm = 60 / (averageInterval * (renderedBuffer.length / renderedBuffer.sampleRate) / features.amplitudeSpectrum.length );
     }
 
@@ -194,7 +200,7 @@ function bufferToWave(abuffer, len) {
 
     while (pos < length) {
         for (i = 0; i < numOfChan; i++) {
-            // Interleave-Daten ( உதார: L-R-L-R...)
+            // Interleave-Daten
             sample = Math.max(-1, Math.min(1, channels[i][offset])); // Clamp
             sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // Skalierung + Runden
             view.setInt16(pos, sample, true); // Schreibe in Little-Endian
