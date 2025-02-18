@@ -34,10 +34,10 @@
 
         <section id="editor-section" style="display: none;">
             <h2>Editor</h2>
-            <div class="toolbar">
+             <div class="toolbar">
                 <div>
-                    <button id="zoom-in" title="Vergrößern"> + </button>
-                    <button id="zoom-out" title="Verkleinern"> - </button>
+                    <button id="zoom-in" title="Vergrößern (Plus)"> + </button>
+                    <button id="zoom-out" title="Verkleinern (Minus)"> - </button>
                 </div>
                 <div>
                 <label for="snap-to-grid">Snap:</label>
@@ -61,15 +61,17 @@
                 <div id="cursor"></div>
                  <div class="selection-box" style="display: none;"></div>
             </div>
+
             <div class="controls">
                 <button id="play-pause" title="Play/Pause (Leertaste)">Play/Pause</button>
                 <button id="cut" title="Ausschneiden (X)">Cut</button>
+                <button id="copy" title="Kopieren(Strg/Cmd + C)">Copy</button>
+                <button id="paste" title="Einfügen (Strg/Cmd + V)">Paste</button>
                 <button id="delete" title="Löschen (Entf)">Delete</button>
                 <button id="undo" title="Rückgängig (Strg/Cmd + Z)">Undo</button>
                 <button id="redo" title="Wiederholen (Strg/Cmd + Y)">Redo</button>
                 <button id="detect-key" title="Tonart erkennen">Key</button>
                 <button id="detect-bpm" title="BPM erkennen">BPM</button>
-
             </div>
 
             <div id="preview">
@@ -126,7 +128,7 @@
     </main>
 
     <footer>
-        <p>&copy; 2024 Echoel - <a href="https://www.paypal.me/echoel" target="_blank" rel="noopener noreferrer">Donate via PayPal</a></p>
+      <p>&copy; 2024 Echoel - <a href="https://www.paypal.me/echoel" target="_blank" rel="noopener noreferrer">Donate via PayPal</a></p>
     </footer>
     <script src="script.js"></script>
 </body>
