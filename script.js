@@ -2530,4 +2530,1490 @@ document.addEventListener('DOMContentLoaded', () => {
       dragStartX = event.clientX - timeline.getBoundingClientRect().left; // X-Position relativ zur Timeline
 
       //Setze Auswahl direkt an der richtigen Stelle
+      selectionDiv.style.left = `${dragStartX}px`;
+      selectionDiv.style.top = '0';
+      selectionDiv.style.width = '0';
+      selectionDiv.style.height = `${timeline.offsetHeight}px`; // Volle Höhe
+      selectionDiv.style.display = 'block'; // Sichtbar machen
+    });
+
+    //Mousemove Event
+    timeline.addEventListener('mousemove', (event) => {
+      if (isDragging) {
+        const currentX = event.clientX - timeline.getBoundingClientRect().left; // X-Position relativ zur Timeline
+        const width = Math.abs(currentX - dragStartX); //Berechne Breite
+        const left = Math.min(dragStartX, currentX); //Berechne linke Position
+        selectionDiv.style.width = `${width}px`; //Setze Breite
+        selectionDiv.style.left = `${left}px`; //Setze Position
+      }
+    });
+
+    //Mouseup Event
+    timeline.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false; // Beende Dragging-Modus
+        selectionDiv.style.display = 'none'; // Ausblenden
+
+        // -- Ausgewählte Spuren ermitteln --
+        selectedTracks = []; // Vorherige Auswahl löschen!
+        const selectionRect = selectionDiv.getBoundingClientRect(); // Rechteck der Auswahl
+
+        // Gehe durch alle Spuren
+        tracks.forEach(track => {
+          const trackElement = track.element;
+          const trackRect = trackElement.getBoundingClientRect();
+
+          // Überprüfen, ob sich die Rechtecke überschneiden
+          if (trackRect.left < selectionRect.right &&
+            trackRect.right > selectionRect.left &&
+            trackRect.top < selectionRect.bottom &&
+            trackRect.bottom > selectionRect.top) {
+            selectTrack(track.id) // Selektiere die Spur
+          }
+
+        });
+      }
+    });
+
+    // --- Tastaturkürzel ---
+    function handleKeyDown(event) {
+      // Ignoriere Tastatureingaben in Input-Feldern (außer Checkboxen, um Snap-to-Grid zu toggeln)
+      if (event.target.tagName.toLowerCase() === 'input' && event.target.type !== 'checkbox') {
+        return;
+      }
+
+      switch (event.key) {
+        case ' ': // Leertaste
+          togglePlayPause();
+          event.preventDefault(); // Standardverhalten (Scrollen) verhindern
+          break;
+        case 'Delete': // Entfernen-Taste
+        case 'Backspace':
+          deleteSelectedTracks();
+          break;
+        case 'x':
+        case 'X':
+          cutSelectedTracks();
+          break;
+        case 'c': // Keine Modifikatortaste!
+          if (event.ctrlKey || event.metaKey) {
+            copySelectedTrack();
+          }
+          break;
+        case 'v': // Keine Modifikatortaste!
+          if (event.ctrlKey || event.metaKey) {
+            pasteCopiedTrack();
+          }
+          break;
+        case 'z':
+          if (event.ctrlKey || event.metaKey) {
+            if (event.shiftKey) {
+              redo(); // Strg/Cmd + Shift + Z = Redo
+            } else {
+              undo(); // Strg/Cmd + Z = Undo
+            }
+            event.preventDefault(); // Standardverhalten verhindern
+          }
+          break;
+        case 'y': // Für Redo (auf einigen Tastaturen)
+          if (event.ctrlKey || event.metaKey) {
+            redo();
+          }
+          break;
+        case 's':
+          if (event.ctrlKey || event.metaKey) {
+            event.preventDefault(); // Verhindert das Standard-Speichern des Browsers
+            saveProject();
+          }
+          break;
+        case 'ArrowLeft':
+          if (isPlaying) return;
+          moveCursor(-0.1); //  0.1 Sekunden zurück
+          break;
+        case 'ArrowRight':
+          if (isPlaying) return;
+          moveCursor(0.1);  //  0.1 Sekunden vor
+          break;
+        case '+': // Zoom In (Plus-Taste)
+        case '=': // Manche Tastaturen
+           if (event.ctrlKey || event.metaKey) { // Mit Strg/Cmd-Taste
+              zoomLevel *= 1.2;
+              updateZoom();
+              event.preventDefault(); // Standardverhalten verhindern (Browser-Zoom)
+            }
+            break;
+        case '-': // Zoom Out (Minus-Taste)
+           if (event.ctrlKey || event.metaKey){
+              zoomLevel /= 1.2;
+              updateZoom();
+              event.preventDefault();
+           }
+           break;
+      }
+    }
+
+      // Funktion, um den Cursor zu bewegen
+      function moveCursor(delta) {  // delta = Zeitdifferenz in Sekunden
+        const currentPosition = parseFloat(cursor.style.left || 0); // Aktuelle Position in Pixeln, oder 0
+        let newPosition = currentPosition + (delta * 50 * zoomLevel);     // Neue Position in Pixeln
+        newPosition = Math.max(0,newPosition) // Nicht kleiner als Null
+
+        cursor.style.left = `${newPosition}px`;  // CSS-Eigenschaft direkt setzen
+      }
+
+    // --- Mausrad (Zoom) ---
+    //Debounce Funktion, damit nicht zu viele Events gefeuert werden.
+    const debouncedUpdateZoom = debounce(updateZoom, 50); //kürzere Reaktionszeit
+
+    function handleTimelineWheel(event) {
+        event.preventDefault(); // Standardverhalten (Scrollen) verhindern
+
+        // Zoom-Faktor basierend auf der Mausrad-Richtung
+        const delta = event.deltaY > 0 ? 0.9 : 1.1; // Mausrad nach unten/oben, zoomt stärker
+        zoomLevel *= delta;
+       debouncedUpdateZoom(); // Aufruf über die debounced-Funktion
+    }
+
+    // --- Touch-Events (Mobile) ---
+      let touchStartX = 0;
+      let initialLeft = 0;
+
+    function handleTouchStart(event) {
+       if (event.touches.length === 1) { // Nur bei einem Finger
+            touchStartX = event.touches[0].clientX;
+            initialLeft = parseFloat(cursor.style.left || 0); // Aktuelle Cursorposition
+             event.preventDefault(); // Standardverhalten verhindern
+        }
+    }
+
+    function handleTouchMove(event) {
+       if (event.touches.length === 1 && !isPlaying) { // Nur bei einem Finger
+            const touchCurrentX = event.touches[0].clientX;
+            const deltaX = touchCurrentX - touchStartX;
+            let newPosition = initialLeft + deltaX;
+
+            // Stelle sicher, dass der Cursor nicht negativ wird
+            newPosition = Math.max(0, newPosition);
+            cursor.style.left = `${newPosition}px`;  // CSS-Eigenschaft direkt
+            event.preventDefault();
+        }
+    }
+
+    function handleTouchEnd(event) {
+      // Hier könnte Logik für Aktionen nach dem Loslassen implementiert werden (z.B. Auswahl)
+    }
+
+    // --- Web Worker Nachrichten-Handling ---
+    audioWorker.onmessage = (event) => {
+      if (event.data.type === 'keyResult') {
+        console.log('Erkannte Tonart (vom Worker):', event.data.key);
+        alert(`Erkannte Tonart: ${event.data.key.tonic} ${event.data.key.type}`); // Direkte Anzeige
+
+      } else if (event.data.type === 'bpmResult') {
+        console.log('Erkanntes BPM (vom Worker):', event.data.bpm);
+        alert(`Erkanntes Tempo: ${event.data.bpm.toFixed(2)} BPM`); // Auf 2 Dezimalstellen runden
+
+      } else if (event.data.type === 'audioBuffer') {
+        // Konvertiere empfangene Daten in AudioBuffer
+        const audioBuffer = audioContext.createBuffer(
+          event.data.numberOfChannels,
+          event.data.length,
+          event.data.sampleRate
+        );
+        for (let i = 0; i < event.data.numberOfChannels; i++) {
+          audioBuffer.getChannelData(i).set(event.data.channelData[i]);
+        }
+
+        // Erstelle einen Blob aus dem AudioBuffer
+        audioBufferToBlob(audioBuffer)
+          .then(blob => {
+            //Verwendung des Blobs
+          })
+          .catch(error => {
+            console.error("Fehler beim Erstellen des Blobs aus dem AudioBuffer:", error);
+          });
+      } else if (event.data.type === 'mp3Blob') {
+        //Verarbeite den fertigen mp3 Blob
+        const blob = event.data.mp3Blob;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); //Link erstellen
+        a.href = url;
+        a.download = 'exported_audio.mp3';
+        document.body.appendChild(a);
+        a.click(); //Simuliere Klick
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    };
+
+    // --- Audio-Kontext fortsetzen (für Autoplay-Richtlinien) ---
+    function resumeAudioContext() {
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+    }
+
+    // Event-Listener für Benutzerinteraktionen (um AudioContext fortzusetzen)
+    document.addEventListener('click', resumeAudioContext);
+    document.addEventListener('keydown', resumeAudioContext);
+    document.addEventListener('touchstart', resumeAudioContext, { passive: true });
+
+
+    // --- Funktionen für die Bearbeitung (Cut, Copy, Paste, Delete, Undo/Redo) ---
+    //Cut
+    async function cutSelectedTracks() {
+      if (selectedTracks.length === 0) return;
+
+      saveStateForUndo(); // Vor der Änderung speichern
+
+      const cutPosition = parseFloat(cursor.style.left) / (50 * zoomLevel);  // Pixel in Sekunden
+
+      // Stelle sicher, dass die Tracks in der richtigen Reihenfolge sind
+      const sortedTracks = [...selectedTracks].sort((a, b) => {
+        return tracks.findIndex(track => track.id === a) - tracks.findIndex(track => track.id === b)
+      })
+
+      for (const trackId of sortedTracks) {
+        await cutTrack(trackId, cutPosition); //Das await ist wichtig!
+      }
+    }
+
+    async function cutTrack(trackId, position) {
+      const track = tracks.find(t => t.id === trackId);
+      if (!track) return;
+
+      const originalUrl = track.src; //wichtig für das richtige zuschneiden
+      const originalBlob = await getBlobFromUrl(originalUrl); // Funktion von vorheriger Antwort
+
+      if (!originalBlob) {
+        console.error("Blob konnte nicht (erneut) geladen werden. Schneiden nicht möglich.");
+        return;
+      }
+      const cutTime = position; //  Pixel nicht mehr in Sekunden umrechnen.
+
+
+      if (track.type === 'audio') {
+        //Audio schneiden
+        const originalBuffer = await audioContext.decodeAudioData(await originalBlob.arrayBuffer());
+        // 1. Teile den originalBuffer in zwei Teile
+        const firstBuffer = audioContext.createBuffer(
+          originalBuffer.numberOfChannels,
+          Math.floor(cutTime * originalBuffer.sampleRate),
+          originalBuffer.sampleRate
+        );
+
+        const secondBuffer = audioContext.createBuffer(
+          originalBuffer.numberOfChannels,
+          originalBuffer.length - Math.floor(cutTime * originalBuffer.sampleRate),
+          originalBuffer.sampleRate
+        );
+
+        // Kopiere die Daten
+        for (let channel = 0; channel < originalBuffer.numberOfChannels; channel++) {
+          const originalData = originalBuffer.getChannelData(channel);
+          const firstData = firstBuffer.getChannelData(channel);
+          const secondData = secondBuffer.getChannelData(channel);
+
+          firstData.set(originalData.subarray(0, Math.floor(cutTime * originalBuffer.sampleRate)));
+          secondData.set(originalData.subarray(Math.floor(cutTime * originalBuffer.sampleRate)));
+
+        }
+
+        //Funktion zum konvertieren von Audiobuffer zu Blob
+        async function audioBufferToBlob(audioBuffer, type = 'audio/wav') {
+          const worker = new Worker('./audio-worker.js');
+
+          return new Promise((resolve, reject) => {
+            worker.onmessage = (e) => {
+              if (e.data.error) {
+                reject(e.data.error);
+              } else {
+                resolve(e.data.blob);
+              }
+              worker.terminate(); // Worker beenden
+            };
+
+            worker.onerror = (error) => {
+              reject(error);
+              worker.terminate();
+            };
+
+            worker.postMessage({ audioBuffer, type });
+          });
+        }
+
+
+        // Erstelle neue Blobs und URLs
+        const firstBlob = await audioBufferToBlob(firstBuffer);
+        const firstUrl = URL.createObjectURL(firstBlob);
+
+        const secondBlob = await audioBufferToBlob(secondBuffer);
+        const secondUrl = URL.createObjectURL(secondBlob);
+
+        // 2. Ersetze den ursprünglichen Track durch die zwei neuen
+        //wavesurfer Instanz updaten und löschen
+        if (wavesurferInstances[trackId]) {
+          wavesurferInstances[trackId].destroy(); // Zerstöre die alte Wavesurfer-Instanz
+          delete wavesurferInstances[trackId]; // Lösche sie aus dem Objekt
+        }
+        const newTrack = { ...track, src: firstUrl, duration: firstBuffer.duration, element: null }; //  element: null, wird neu erstellt
+        tracks.splice(tracks.indexOf(track), 1, newTrack); // Ersetzen
+
+        const secondTrack = {
+          ...track, // Kopie aller Eigenschaften
+          id: currentTrackId++, // Neue ID!
+          src: secondUrl,
+          startTime: track.startTime + cutTime,
+          duration: secondBuffer.duration,
+          element: null,
+        };
+        tracks.push(secondTrack);
+
+        // Alte URL freigeben (WICHTIG!)
+        URL.revokeObjectURL(track.src);
+
+        // 3. Zeitleiste aktualisieren (DOM)
+        track.element.remove();
+        addMediaToTimeline(firstBlob, 'audio', firstBuffer, newTrack);
+        addMediaToTimeline(secondBlob, 'audio', secondBuffer, secondTrack);
+
+      } else if (track.type === 'video') {
+        //Video schneiden
+
+        const originalVideo = document.createElement('video');
+        originalVideo.src = track.src;
+        await originalVideo.play(); // Warten, bis das Video geladen ist
+        // 1. Bestimme die Frame-Rate (vereinfacht)
+        const frameRate = 30; //  Annäherung, da exakte Bestimmung im Browser schwierig ist
+
+        // 2. Berechne die Frame-Nummer für den Schnitt
+        const cutFrame = Math.floor(cutTime * frameRate);
+
+        // 3. Erstelle zwei MediaRecorder
+        const firstRecorder = new MediaRecorder(originalVideo.captureStream());
+        const secondRecorder = new MediaRecorder(originalVideo.captureStream());
+
+        // 4. Arrays für die Daten
+        const firstChunks = [];
+        const secondChunks = [];
+
+        // 5. Event-Handler für die Recorder
+        firstRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            firstChunks.push(event.data);
+          }
+        };
+        secondRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            secondChunks.push(event.data);
+          }
+        };
+
+        // 6. Starte die Aufnahme, stoppe nach der berechneten Zeit
+
+        //Promise für setTimeOut
+        function wait(ms) {
+          return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        firstRecorder.start();
+        await wait(cutTime * 1000); //Zeit berechnen
+        firstRecorder.stop(); // Stoppe den ersten Recorder nach cutTime Sekunden
+
+        secondRecorder.start(); // Starte den zweiten Recorder sofort
+        originalVideo.currentTime = cutTime; // Springe im Originalvideo zur cutTime
+        await wait((originalVideo.duration - cutTime) * 1000) //solange aufnehmen bis das Ursprungsvideo zu Ende ist
+        secondRecorder.stop();
+
+
+
+        // 7. Erstelle Blobs aus den Daten
+        const firstBlob = new Blob(firstChunks, { type: 'video/webm' });
+        const secondBlob = new Blob(secondChunks, { type: 'video/webm' });
+
+        // URLs erstellen (für die spätere Verwendung)
+        const firstUrl = URL.createObjectURL(firstBlob);
+        const secondUrl = URL.createObjectURL(secondBlob);
+
+        // 8. Ersetze den ursprünglichen Track durch die zwei neuen
+        //wavesurfer Instanz updaten und löschen, falls vorhanden
+        if (wavesurferInstances[trackId]) {
+          wavesurferInstances[trackId].destroy(); // Zerstöre die alte Wavesurfer-Instanz
+          delete wavesurferInstances[trackId]; // Lösche sie aus dem Objekt
+        }
+
+        const newTrack = { ...track, src: firstUrl, duration: cutTime, element: null }; //  element: null
+        tracks.splice(tracks.indexOf(track), 1, newTrack
+        tracks.splice(tracks.indexOf(track), 1, newTrack); // Ersetzen
+
+        const secondTrack = {
+          ...track, // Kopie aller Eigenschaften
+          id: currentTrackId++, // Neue ID!
+          src: secondUrl,
+          startTime: track.startTime + cutTime,
+          duration: track.duration - cutTime,
+          element: null,
+        };
+        tracks.push(secondTrack);
+        // Alte URL freigeben (WICHTIG!)
+        URL.revokeObjectURL(track.src);
+
+        // 9. Zeitleiste aktualisieren (DOM)
+        track.element.remove();
+        addMediaToTimeline(firstBlob, 'video', null, newTrack); //Ersten Track hinzufügen
+        addMediaToTimeline(secondBlob, 'video', null, secondTrack); // Zweiten Track hinzufügen
+
+
+      } else if (track.type === 'image') {
+        // Bilder können nicht geschnitten werden, lösche die Spur
+        deleteTrack(trackId);
+      }
+    }
+
+    // --- Löschen ---
+
+    function deleteSelectedTracks() {
+      if (selectedTracks.length === 0) return;
+
+      saveStateForUndo(); // Vor der Änderung speichern
+
+      // Erstelle eine Kopie, um Probleme beim Iterieren zu vermeiden (wichtig!)
+      const tracksToDelete = [...selectedTracks];
+
+      for (const trackId of tracksToDelete) {
+        deleteTrack(trackId);
+      }
+
+      selectedTracks = [];       // Auswahl leeren
+      updateTrackControls();     // Bedienelemente ausblenden/aktualisieren
+    }
+
+    function deleteTrack(trackId) {
+      const track = tracks.find(t => t.id === trackId);
+      if (!track) return;
+
+      // DOM-Element entfernen
+      track.element.remove();
+
+      // Wavesurfer-Instanz zerstören (falls vorhanden)
+      if (wavesurferInstances[trackId]) {
+        wavesurferInstances[trackId].destroy();
+        delete wavesurferInstances[trackId];
+      }
+
+      // URL freigeben (WICHTIG: Speicherleck verhindern!)
+      URL.revokeObjectURL(track.src);
+
+      // Track aus dem Array entfernen
+      tracks = tracks.filter(t => t.id !== trackId);
+    }
+    // --- Kopieren ---
+
+    function copySelectedTrack() {
+      if (selectedTracks.length === 0) return;
+      const trackId = selectedTracks[0]; //Nimmt nur eine Spur
+      const track = tracks.find((t) => t.id === trackId);
+
+      if (track) {
+        // Erstelle eine *tiefe* Kopie des Track-Objekts
+        copiedTrack = JSON.parse(JSON.stringify(track)); // Klone das Objekt
+        copiedTrack.id = currentTrackId++; // Wichtig: Neue ID, um Konflikte zu vermeiden!
+      }
+    }
+
+    // --- Einfügen ---
+    function pasteCopiedTrack() {
+      if (!copiedTrack) return;
+
+      saveStateForUndo(); // Vor der Änderung speichern!
+
+      // Erstelle eine *tiefe* Kopie des kopierten Tracks (damit Änderungen am Original das nicht beeinflussen)
+      const newTrack = JSON.parse(JSON.stringify(copiedTrack));
+
+      // Aktualisiere ID und Element, um Konflikte zu vermeiden
+      newTrack.id = currentTrackId++;
+      newTrack.element = null; // Wird in addMediaToTimeline neu erstellt.
+      newTrack.startTime = parseFloat(cursor.style.left) / (50 * zoomLevel); // Neue Startzeit (Cursorposition)
+
+      // Erstelle einen neuen Blob und eine neue URL für die kopierte Spur
+      getBlobFromUrl(copiedTrack.src).then(originalBlob => { //Blob laden
+        if (!originalBlob) {
+          console.error('Original Blob nicht gefunden');
+          return;
+        }
+
+        const newBlob = new Blob([originalBlob], { type: originalBlob.type }); //neuer Blob
+        const newUrl = URL.createObjectURL(newBlob); //neue URL
+        newTrack.src = newUrl;
+
+        if (newTrack.type === 'audio') { //neuen Audiobuffer erstellen
+          getAudioBufferFromFile(newBlob).then(audioBuffer => {
+            newTrack.audioBuffer = audioBuffer;
+            addMediaToTimeline(newBlob, 'audio', audioBuffer, newTrack);
+            tracks.push(newTrack); // Füge die *neue* Spur zum tracks-Array hinzu
+          });
+        } else { //Falls Video oder Bild
+          addMediaToTimeline(newBlob, newTrack.type, null, newTrack);
+          tracks.push(newTrack); // Füge die *neue* Spur zum tracks-Array hinzu
+        }
+      });
+    }
+
+    // --- Rückgängig/Wiederholen ---
+    function saveStateForUndo() {
+      // Zustand speichern
+      const currentState = {
+        tracks: JSON.parse(JSON.stringify(tracks)), // Tiefe Kopie der Spuren
+        // Weitere relevante Zustandsdaten (z.B. zoomLevel, selectedTracks)
+        zoomLevel: zoomLevel,
+        selectedTracks: [...selectedTracks], // Kopie des Arrays
+
+      };
+      undoStack.push(currentState);
+      if (undoStack.length > MAX_UNDO_STATES) {
+        undoStack.shift(); // Älteste Zustände entfernen
+      }
+      redoStack = []; // Redo-Stack leeren
+    }
+
+    function undo() {
+      if (undoStack.length === 0) return;
+
+      const previousState = undoStack.pop(); // Letzten Zustand holen
+      redoStack.push(getCurrentState()); // Aktuellen Zustand auf den Redo-Stack
+
+      // Zustand wiederherstellen
+      restoreState(previousState);
+    }
+
+    function redo() {
+      if (redoStack.length === 0) return;
+
+      const nextState = redoStack.pop(); // Nächsten Zustand holen
+      undoStack.push(getCurrentState()); // Aktuellen Zustand auf den Undo-Stack
+
+      // Zustand wiederherstellen
+      restoreState(nextState);
+
+    }
+    //Helfer Funktion um aktuellen Zustand zu bekommen
+    function getCurrentState() {
+      return {
+        tracks: JSON.parse(JSON.stringify(tracks)), // Tiefe Kopie der Spuren
+        zoomLevel: zoomLevel,
+        selectedTracks: [...selectedTracks],
+      };
+    }
+
+    // Funktion, um den Zustand wiederherzustellen
+    function restoreState(state) {
+      // 1. Alles zurücksetzen
+      clearTimeline();
+
+      // 2. Zustand wiederherstellen
+      zoomLevel = state.zoomLevel;
+      selectedTracks = state.selectedTracks;
+
+      // 3. Spuren wiederherstellen (asynchron, da Blobs geladen werden müssen)
+      const loadPromises = state.tracks.map(trackData => {
+        return getBlobFromUrl(trackData.src)
+          .then(blob => {
+            if (!blob) {
+              console.error("Blob konnte nicht wiederhergestellt werden:", trackData.src);
+              return; // Fehler, aber weiter mit den anderen Spuren
+            }
+
+            const file = new File([blob], "media-file", { type: blob.type }); // File-Objekt erstellen
+
+            // Füge die Spur hinzu *ohne* erneutes Laden der Metadaten
+            if (trackData.type === 'audio') {
+              // Erstelle AudioBuffer *synchron* aus den gespeicherten Daten (falls vorhanden)
+              let audioBuffer = null;
+              if (trackData.audioBuffer) {
+                audioBuffer = audioContext.createBuffer(
+                  trackData.audioBuffer.numberOfChannels,
+                  trackData.audioBuffer.length,
+                  trackData.audioBuffer.sampleRate
+                );
+                for (let i = 0; i < trackData.audioBuffer.numberOfChannels; i++) {
+                  audioBuffer.getChannelData(i).set(trackData.audioBuffer.channelData[i]);
+                }
+              }
+              addMediaToTimeline(file, 'audio', audioBuffer, trackData);
+            } else {
+              addMediaToTimeline(file, trackData.type, null, trackData); // Kein AudioBuffer für Video/Bild
+            }
+          });
+      });
+
+      // Warten, bis *alle* Spuren geladen wurden
+      Promise.all(loadPromises).then(() => {
+        // UI aktualisieren (Zoom, Auswahl, etc.)
+        updateZoom();
+        updateTrackControls(); // Zeige die Einstellungen der ersten ausgewählten Spur an (falls vorhanden)
+      });
+    }
+
+    //Alles zurücksetzen
+    function clearTimeline() {
+      // Alle Spuren entfernen (DOM)
+      audioTracksContainer.innerHTML = '';
+      videoTracksContainer.innerHTML = '';
+      imageTracksContainer.innerHTML = '';
+
+
+      // Wavesurfer-Instanzen zerstören
+      for (const trackId in wavesurferInstances) {
+        if (wavesurferInstances.hasOwnProperty(trackId)) {
+          wavesurferInstances[trackId].destroy();
+        }
+      }
+      wavesurferInstances = {};
+
+      // URLs freigeben (Speicherleck verhindern!)
+      for (const track of tracks) {
+        URL.revokeObjectURL(track.src);
+      }
+
+      // Tracks-Array leeren
+      tracks = [];
+      currentTrackId = 0; // Track-ID zurücksetzen
+      selectedTracks = []; // Auswahl zurücksetzen
+    }
+
+
+    // --- Verschieben von Spuren (Drag-and-Drop-Handler) ---
+
+    let draggedTrack = null; // Das aktuell gezogene Track-Objekt
+
+    function handleDragStart(event) {
+        const trackId = parseInt(event.target.dataset.trackId);
+        draggedTrack = tracks.find(t => t.id === trackId);
+
+        if (!draggedTrack) {
+            event.preventDefault(); // Verhindere das Ziehen, wenn kein Track gefunden wurde
+            return;
+        }
+         event.dataTransfer.setData('text/plain', trackId); // ID für den Drop-Event
+         event.target.classList.add('dragging'); // Visuelles Feedback
+    }
+
+    function handleDragOver(event) {
+     event.preventDefault();
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+      if (!draggedTrack) return;
+
+      const trackId = parseInt(event.dataTransfer.getData('text/plain'));
+      if (isNaN(trackId)) return; // Stelle sicher, dass die ID eine Zahl ist.
+
+      const dropTarget = event.target.closest('.timeline');
+      if (!dropTarget) {
+          draggedTrack.element.classList.remove('dragging');
+        draggedTrack = null;
+        return; //Frühzeitiger Abbruch
+      }
+
+      // Berechne die neue Startzeit basierend auf der Mausposition (relativ zur Timeline)
+      const timelineRect = timeline.getBoundingClientRect();
+      let newStartTime = (event.clientX - timelineRect.left) / (50 * zoomLevel);
+
+      // Einrasten am Raster (optional)
+      if (snapToGrid) {
+        newStartTime = Math.round(newStartTime / 0.5) * 0.5; //  0.5 Sekunden Raster
+      }
+        newStartTime = Math.max(0, newStartTime); //Keine Negativen Zeiten
+
+      // Aktualisiere die Startzeit des Tracks
+      draggedTrack.startTime = newStartTime;
+      updateTrackDisplay(draggedTrack); // Neuzeichnen
+
+        draggedTrack.element.classList.remove('dragging');
+        draggedTrack = null; // Zurücksetzen
+         saveStateForUndo();
+    }
+
+
+    // --- Zoomen ---
+    //Debounce Funktion, damit nicht zu viele Events gefeuert werden.
+    const debouncedUpdateZoom = debounce(updateZoom, 50); //kürzere Reaktionszeit
+    function updateZoom() {
+        // Begrenze den Zoom-Level (optional, aber sinnvoll)
+        zoomLevel = Math.max(0.5, Math.min(5, zoomLevel)); //  Werte anpassen
+
+        // Aktualisiere die Breite *aller* Spuren
+        for (const track of tracks) {
+            updateTrackDisplay(track); // Nutze die existierende Funktion
+        }
+         // Cursorposition aktualisieren (wichtig nach dem Zoomen)
+        const currentTime = audioContext.currentTime;
+        cursor.style.left = `${currentTime * 50 * zoomLevel}px`;
+    }
+
+    // --- Timeline-Interaktion (Klicken) ---
+
+    timeline.addEventListener('click', handleTimelineClick);
+
+    function handleTimelineClick(event) {
+        // Berechne die Klickposition relativ zur Timeline
+        const timelineRect = timeline.getBoundingClientRect();
+        const clickX = event.clientX - timelineRect.left;
+
+        // Umrechnung von Pixeln in Sekunden (unter Berücksichtigung des Zoom-Levels)
+        const clickTime = clickX / (50 * zoomLevel);
+
+        // Setze die Abspielposition im AudioContext
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().then(()=> {
+              audioContext.currentTime = clickTime;
+            }); //Context Zustand prüfen und ggf. fortsetzen
+        } else {
+           audioContext.currentTime = clickTime; //Setzte die Zeit im Audio Context
+        }
+
+        // Bewege den Cursor an die neue Position
+        cursor.style.left = `${clickX}px`;
+
+        // Starte die Wiedergabe, falls nicht schon aktiv
+        if (!isPlaying) {
+            togglePlayPause();
+        }
+    }
+
+    // --- Audio-Analyse (Tonart, BPM, Kammerton) ---
+
+    function detectKey(audioBuffer) {
+        // Sende den AudioBuffer an den Web Worker
+        audioWorker.postMessage({ type: 'detectKey', data: { audioBuffer } });
+    }
+
+    function detectBPM(audioBuffer) {
+        audioWorker.postMessage({ type: 'detectBPM', data: { audioBuffer } });
+    }
+
+    function detectConcertPitch() {
+      analyser.getByteFrequencyData(dataArray); // Daten in das Array kopieren
+
+      let maxIndex = 0;
+      let maxValue = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        if (dataArray[i] > maxValue) {
+          maxValue = dataArray[i];
+          maxIndex = i;
+        }
+      }
+
+      const frequency = maxIndex * audioContext.sampleRate / analyser.fftSize;
+      alert(`Geschätzter Kammerton: ${frequency.toFixed(1)} Hz`); // Ausgabe
+      concertPitchInput.value = frequency.toFixed(1); //Eingabefeld
+    }
+
+    function updateConcertPitch() {
+      const newPitch = parseFloat(concertPitchInput.value);
+      if (!isNaN(newPitch) && newPitch >= 400 && newPitch <= 480) {
+        concertPitch = newPitch;
+        localStorage.setItem('concertPitch', concertPitch); // Speichern
+      } else {
+        alert("Ungültiger Kammerton. Bitte einen Wert zwischen 400 und 480 Hz eingeben.");
+        concertPitchInput.value = concertPitch; // Zurücksetzen
+      }
+    }
+
+      // --- Visualisierung ---
+
+    function renderVisuals() {
+        if (!visualsContext) return; // Keine Canvas vorhanden
+
+        const mode = visualsModeSelect.value; // Aktuellen Modus abrufen
+
+        // Canvas löschen
+        visualsContext.clearRect(0, 0, visualsCanvas.width, visualsCanvas.height);
+
+         if (mode === 'off') return; // Visualisierung deaktiviert
+
+        // Analysedaten vom AnalyserNode holen
+         analyser.getByteFrequencyData(dataArray); // Daten in das dataArray kopieren (Frequenzdaten)
+        //analyser.getByteTimeDomainData(dataArray); // Daten für Wellenform (Alternative)
+
+        const barWidth = (visualsCanvas.width / bufferLength) * 2.5; // Breite der Balken
+        let barHeight;
+        let x = 0; // Horizontale Position
+
+         if (mode === 'bars') {
+            // --- Balkenanzeige ---
+            for (let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i] * (visualsCanvas.height / 255); // Skalierung (0-255)
+
+                // Farbverlauf (optional)
+                const r = barHeight + (25 * (i / bufferLength));
+                const g = 250 * (i / bufferLength);
+                const b = 50;
+
+                visualsContext.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                visualsContext.fillRect(x, visualsCanvas.height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 1; // Abstand zwischen den Balken
+            }
+        } else if (mode === 'spectrum') {
+            // --- Spektralanzeige (Kreis oder Linie) ---
+            // (Implementierung hier)
+             // ... (komplexere Logik, siehe Hinweise unten) ...
+              // Beispiel: Einfache Linienzeichnung (sehr vereinfacht)
+            visualsContext.beginPath();
+            visualsContext.moveTo(0, visualsCanvas.height); //  linken unteren Ecke
+            for (let i = 0; i < bufferLength; i++) {
+              barHeight = dataArray[i] * (visualsCanvas.height / 255);
+              let y = visualsCanvas.height - barHeight; // Invertieren
+              visualsContext.lineTo(i * (visualsCanvas.width / bufferLength), y);
+           }
+             visualsContext.lineTo(visualsCanvas.width, visualsCanvas.height); //  rechten unteren Ecke
+            visualsContext.strokeStyle = 'rgb(0, 165, 25
+            visualsContext.stroke(); // Zeichne die Linie
+
+        } else if (mode === 'waveform') {
+            // --- Wellenform ---
+           analyser.getByteTimeDomainData(dataArray); //Zeitbereichsdaten!
+            visualsContext.beginPath();
+            const sliceWidth = visualsCanvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0; // Normalisieren (0-255 -> 0-2)
+                const y = v * visualsCanvas.height / 2;
+
+                if (i === 0) {
+                    visualsContext.moveTo(x, y);
+                } else {
+                    visualsContext.lineTo(x, y);
+                }
+                x += sliceWidth;
+            }
+             visualsContext.lineTo(visualsCanvas.width, visualsCanvas.height / 2); //Zur Mitte
+            visualsContext.strokeStyle = 'rgb(0, 165, 255)'; // Farbe
+            visualsContext.stroke();
+        }
+    }
+
+    // Event-Listener für den Visualisierungsmodus
+    if(visualsModeSelect){ //Stelle sicher, dass das Element existiert.
+      visualsModeSelect.addEventListener('change', () => {
+        if (visualsModeSelect.value !== 'off') {
+            // Starte die Visualisierung, falls sie nicht schon läuft
+            if (!isPlaying) {
+              togglePlayPause(); // Starte die Wiedergabe (und damit die Visualisierung)
+              // Keine zusätzliche Logik hier, da updateCursor die Visualisierung aktualisiert
+            }
+        }
+      });
+    }
+
+
+
+    // --- Export-Funktionen ---
+
+    // Haupt-Exportfunktion
+    async function exportProject() {
+        const exportFormat = exportFormatSelect.value;
+        const videoFormat = exportVideoButtonFormat.value;
+
+        // Setze Endzeit, falls nicht gesetzt
+        if (exportEndTime === 0) {
+            let maxDuration = 0;
+            for (const track of tracks) {
+                maxDuration = Math.max(maxDuration, track.startTime + track.duration);
+            }
+            exportEndTime = maxDuration;
+        }
+
+        exportProgress.style.display = "block";
+        exportProgress.querySelector("progress").value = 0;
+        exportProgressSpan.textContent = "Exportiere...";
+        exportMessageDiv.textContent = '';
+
+        try {
+            if (exportFormat === 'mp4') {
+                // VIDEO-EXPORT mit ffmpeg.wasm
+                if (!ffmpeg || !ffmpeg.isLoaded()) { // Prüfe, ob ffmpeg geladen ist
+                    alert("FFmpeg wird noch geladen oder ist nicht verfügbar. Bitte versuche es in Kürze erneut, oder verwende ein anderes Exportformat.");
+                    exportProgress.style.display = "none"; // Fortschrittsanzeige ausblenden
+                    return;
+                }
+                await exportVideoWithFFmpeg(exportStartTime, exportEndTime, videoFormat);
+
+
+            } else if (exportFormat === 'webm') { // WebM direkt
+                const videoBlob = await captureVideoFramesAsWebM(exportStartTime, exportEndTime);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(videoBlob);
+                downloadLink.download = 'export.webm';
+                downloadLink.click();
+                URL.revokeObjectURL(downloadLink.href);
+
+            } else if (exportFormat === 'mp3' || exportFormat === 'wav') {
+                // AUDIO-EXPORT
+                const audioBlob = await exportAudio(exportFormat, exportStartTime, exportEndTime);
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(audioBlob);
+                downloadLink.download = `export.${exportFormat}`;
+                downloadLink.click();
+                URL.revokeObjectURL(downloadLink.href);
+
+            } else if (exportFormat === 'jpeg' || exportFormat === 'png') {
+                // BILD-EXPORT
+                const imageBlob = exportImage(exportFormat);
+
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(imageBlob);
+                downloadLink.download = 'export.' + exportFormat;
+                downloadLink.click();
+                URL.revokeObjectURL(downloadLink.href);
+            }
+            exportProgress.querySelector("progress").value = 100;
+            exportProgressSpan.textContent = "Export abgeschlossen!";
+            setTimeout(() => { exportProgress.style.display = "none"; }, 2000);
+
+        } catch (error) {
+            console.error("Fehler beim Export:", error);
+            alert("Fehler beim Export: " + error.message);
+            exportMessageDiv.textContent = "Export fehlgeschlagen: " + error.message; // Detailliertere Meldung
+            exportProgress.style.display = "none";
+        }
+    }
+    // --- Export Audio ---
+
+    async function exportAudio(format, startTime = 0, endTime = null) {
+        if(tracks.length === 0){
+          throw new Error('Keine Spuren zum exportieren vorhanden')
+        }
+
+        // 1. Bestimme die Länge des resultierenden Audiobuffers
+        let maxLength = 0;
+        for (const track of tracks) {
+          if(track.type === 'audio'){ //Nur Audiospuren
+            const trackEndTime = track.startTime + track.duration;
+            maxLength = Math.max(maxLength, trackEndTime);
+          }
+        }
+          // Berücksichtige Export-Zeitbereich
+        const actualEndTime = endTime !== null ? Math.min(endTime, maxLength) : maxLength;
+        const duration = Math.max(0, actualEndTime - startTime); //Stelle sicher, dass die Dauer nicht negativ ist
+
+
+        // 2. Erstelle einen OfflineAudioContext
+        const offlineContext = new OfflineAudioContext(
+            2, // Anzahl der Kanäle (Stereo)
+            Math.floor(duration * audioContext.sampleRate), // Länge in Samples
+            audioContext.sampleRate
+        );
+
+        // 3. Verbinde alle Audiospuren mit dem OfflineAudioContext
+        for (const track of tracks) {
+            if (track.type === 'audio' && track.audioBuffer) {
+                // Erstelle einen BufferSourceNode für den Track
+                const source = offlineContext.createBufferSource();
+                source.buffer = track.audioBuffer;
+
+                // Wende Effekte an (tiefe Kopie, um Original nicht zu verändern)
+                const gainNode = offlineContext.createGain();
+                const pannerNode = offlineContext.createStereoPanner();
+                const filterNode = offlineContext.createBiquadFilter(); //Hinzugefügt
+
+                //Verbindungen
+                source.connect(gainNode);
+                gainNode.connect(pannerNode);
+                pannerNode.connect(filterNode);
+                filterNode.connect(offlineContext.destination);
+
+                // Werte setzen (aus track.effectValues)
+                gainNode.gain.value = track.effectValues.volume;
+                pannerNode.pan.value = track.effectValues.panning;
+                filterNode.type = track.effectValues.filterType;
+                filterNode.frequency.value = track.effectValues.filterCutoff;
+
+                // Berechne die Startzeit im Kontext des Exports
+                let trackStartTime = track.startTime - startTime;
+                trackStartTime = Math.max(0, trackStartTime); // Stelle sicher, dass die Startzeit nicht negativ ist
+
+                // Starte die Wiedergabe der Spur zum richtigen Zeitpunkt
+                source.start(trackStartTime);
+            }
+        }
+
+        // 4. Rendere den OfflineAudioContext (asynchron)
+          return new Promise((resolve, reject) => {
+            offlineContext.startRendering().then(async (renderedBuffer) => { // Rendern starten
+
+                // 5. Konvertiere den gerenderten AudioBuffer in das gewünschte Format (WAV oder MP3)
+                let audioBlob;
+                if (format === 'wav') {
+                    audioBlob = await audioBufferToBlob(renderedBuffer, 'audio/wav');
+                } else if (format === 'mp3') {
+                    // MP3-Encoding im Web Worker (LAMEjs)
+                    audioWorker.postMessage({ type: 'encodeAudio', data: { audioBuffer: renderedBuffer, bitRate: 192 } }); //192kbps
+
+                    audioBlob = await new Promise((resolveWorker, rejectWorker) => {
+                      audioWorker.onmessage = (event) => { //Abfangen der Worker Message
+                        if (event.data.type === 'mp3Blob') {
+                          resolveWorker(event.data.mp3Blob); // Bei Erfolg -> Promise auflösen
+                        } else if (event.data.type === 'error') {
+                          rejectWorker(new Error(event.data.message)); // Bei Fehler -> Promise ablehnen
+                        }
+                      };
+                       audioWorker.onerror = (error) => { // Fehler im Worker abfangen
+                            console.error("Worker error:", error);
+                            rejectWorker(error); // Fehler weiterleiten
+                        };
+                    });
+
+                } else {
+                    reject(new Error('Ungültiges Audioformat')); // Fehler, falls ungültiges Format
+                    return;
+                }
+                resolve(audioBlob); // Gebe den Blob zurück
+            }).catch(reject); // Fehler beim Rendern abfangen
+        });
+    }
+
+    // --- Export Video (WebM) ---
+    async function captureVideoFramesAsWebM(startTime = 0, endTime = null) {
+        return new Promise((resolve, reject) => {
+          // 1. Bestimme die Dimensionen und Framerate für den Export
+            const resolution = exportResolutionSelect.value.split('x');
+            const width = parseInt(resolution[0]);
+            const height = parseInt(resolution[1]);
+            const framerate = parseInt(exportFramerateSelect.value);
+
+            // 2. Erstelle ein Canvas-Element in der gewünschten Größe
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+
+            // 3. Erstelle einen MediaStream aus dem Canvas
+            const stream = canvas.captureStream(framerate);
+
+            // 4. Erstelle einen MediaRecorder
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+            let chunks = []; //Speichert die Daten
+
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
+            };
+
+            recorder.onstop = () => {
+              const blob = new Blob(chunks, { type: 'video/webm' });
+              resolve(blob); //Promise mit dem Blob als Ergebnis auflösen
+            };
+
+            recorder.onerror = (error) => {
+                console.error("Fehler beim Encodieren des Videos:", error);
+                reject(error); // Promise ablehnen, wenn Fehler auftritt
+            };
+            recorder.start();
+            // 5. Zeichne die Frames auf das Canvas (asynchron)
+            let currentTime = startTime;
+            const frameDuration = 1 / framerate;
+
+           function drawFrame() {
+              // Berechne die aktuelle Zeit relativ zum Startzeitpunkt des Exports.
+              let currentTime = startTime;
+              // Zeichne die Frames auf das Canvas (asynchron, mit requestAnimationFrame)
+              function drawFrame() {
+                // Berechne die aktuelle Zeit relativ zum Startzeitpunkt des Exports.
+                let currentTime = startTime; //Sicherstellen das alles bei 0 anfängt
+                //Zeichne aktuellen Frame
+                drawVideoFrame(context, width, height, currentTime);
+
+                currentTime += frameDuration; //Erhöhe Zeit
+
+                if (endTime !== null && currentTime < endTime) { //Prüfe, ob die Endzeit erreicht wurde
+                  // Fordere den nächsten Frame an, solange das Ende nicht erreicht ist
+                    requestAnimationFrame(drawFrame); // Nächsten Frame anfordern
+                } else {
+                  // Stoppe die Aufnahme, wenn das Ende erreicht ist
+                    recorder.stop();
+                }
+             }
+               drawFrame(); //Ersten Frame zeichnen
+           }
+           drawFrame(); // Starte die Zeichenschleife
+        });
+    }
+
+    function drawVideoFrame(context, width, height, currentTime) {
+        // Lösche den Canvas-Inhalt
+        context.clearRect(0, 0, width, height);
+
+        // Zeichne alle sichtbaren Video- und Bildspuren
+        for (const track of tracks) {
+            if (track.type === 'video' || track.type === 'image') {
+               const trackStart = track.startTime;
+               const trackEnd = track.startTime + track.duration;
+                // Überprüfen, ob der aktuelle Zeitpunkt innerhalb der Spur liegt.
+              if(currentTime >= trackStart && currentTime <= trackEnd){
+                const media = track.mediaElement;
+
+                // Berechne die Position und Größe für das Zeichnen (unter Berücksichtigung von Seitenverhältnis und 'object-fit')
+                let drawWidth = media.videoWidth || media.width;
+                let drawHeight = media.videoHeight || media.height;
+                let x = 0;
+                let y = 0;
+
+                // Passe die Größe an, um das Seitenverhältnis beizubehalten,
+                // ähnlich wie object-fit: contain
+                const videoRatio = drawWidth / drawHeight;
+                const canvasRatio = width / height;
+
+                if (videoRatio > canvasRatio) {
+                    // Video ist breiter als der Canvas
+                    drawHeight = height;
+                    drawWidth = height * videoRatio;
+                    x = (width - drawWidth) / 2; // Zentrieren
+                } else {
+                    // Video ist höher oder gleich breit wie der Canvas
+                    drawWidth = width;
+                    drawHeight = width / videoRatio;
+                    y = (height - drawHeight) / 2; // Zentrieren
+                }
+
+                // Wende CSS-Filter an (Helligkeit, Kontrast, etc.)
+                context.filter = track.mediaElement.style.filter;
+                // Zeichne das Video-/Bildelement auf den Canvas.
+                context.drawImage(media, x, y, drawWidth, drawHeight);
+
+                // Setze den Filter zurück, um andere Elemente nicht zu beeinflussen
+                context.filter = 'none';
+              }
+            }
+        }
+    }
+    // ---
+    // --- Export Image ---
+    function exportImage(format) {
+        const canvas = document.createElement('canvas'); // Canvas erstellen
+        canvas.width = 1920;  //  Standardauflösung, anpassen
+        canvas.height = 1080;
+        const ctx = canvas.getContext('2d');
+
+        // Zeichne die *sichtbaren* Video- und Bildspuren auf das Canvas (ähnlich wie beim Video-Export)
+        for (const track of tracks) {
+            if ((track.type === 'video' || track.type === 'image') && track.mediaElement) {
+                // Einfache Zeichenoperation (ohne Zeitlogik, da es ein Standbild ist)
+                ctx.drawImage(track.mediaElement, 0, 0, canvas.width, canvas.height); //Anpassen für Seitenverhältnis
+            }
+        }
+
+        // Canvas-Inhalt als Blob exportieren (JPEG oder PNG)
+        const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+        let quality = 0.9; //Standardqualität
+        if(format === 'jpeg'){
+          return canvas.toBlob((blob) => {
+            resolve(blob);
+          }, mimeType, quality);
+        } else {
+          return canvas.toBlob((blob) => {
+            resolve(blob);
+          }, mimeType);
+        }
+    }
+
+    // --- Laden und Speichern ---
+       //Speichern
+    function saveProject() {
+        const projectData = {
+            tracks: tracks.map(track => ({
+                type: track.type,
+                src: track.src, // URL des Blobs
+                startTime: track.startTime,
+                duration: track.duration,
+                effectValues: track.effectValues, // Speichere *alle* Effekte!
+                audioBuffer: track.type === 'audio' ? { // Speichere AudioBuffer-Daten *separat*
+                    numberOfChannels: track.audioBuffer.numberOfChannels,
+                    length: track.audioBuffer.length,
+                    sampleRate: track.audioBuffer.sampleRate,
+                    channelData: Array.from({ length: track.audioBuffer.numberOfChannels }, (_, i) => Array.from(track.audioBuffer.getChannelData(i))),
+                } : null,
+            })),
+            concertPitch: concertPitch,
+            zoomLevel: zoomLevel,
+            snapToGrid: snapToGrid,
+            // ... (weitere globale Einstellungen) ...
+        };
+
+        const projectJson = JSON.stringify(projectData);
+
+        // Download anbieten
+        const blob = new Blob([projectJson], { type: 'application/json' });
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(blob);
+        downloadLink.download = 'echoel-project.esproj'; // .esproj als Dateiendung
+        downloadLink.click();
+        URL.revokeObjectURL(downloadLink.href); // URL wieder freigeben
+    }
+
+   async function loadProject(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+          if (file.name.split('.').pop() !== 'esproj') { //Dateiendung prüfen
+            alert('Ungültiges Dateiformat. Bitte eine .esproj Datei auswählen.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const projectData = JSON.parse(e.target.result);
+
+                // 1. Alles zurücksetzen (wichtig!)
+                clearTimeline();
+                resetGlobalSettings();
+
+                // 2. Globale Einstellungen wiederherstellen
+                concertPitch = projectData.concertPitch || 440;
+                concertPitchInput.value = concertPitch;
+                zoomLevel = projectData.zoomLevel || 1;
+                snapToGridCheckbox.checked = projectData.snapToGrid || false;
+
+                // 3. Spuren wiederherstellen (asynchron, da Blobs geladen werden müssen)
+                const loadPromises = projectData.tracks.map(trackData => {
+                    return getBlobFromUrl(trackData.src) // Blob laden
+                        .then(blob => {
+                            if (!blob) {
+                                console.error("Blob konnte nicht wiederhergestellt werden:", trackData.src);
+                                // Fehlerbehandlung: Benutzer informieren, Datei neu auswählen lassen, etc.
+                                return; // Fehler, aber weiter mit den anderen Spuren
+                            }
+                             const file = new File([blob], "media-file", { type: blob.type });
+                            // Füge die Spur hinzu *ohne* erneutes Laden der Metadaten (die sind ja schon in trackData)
+                            if (trackData.type === 'audio') {
+                                // Erstelle AudioBuffer *synchron* aus den gespeicherten Daten (falls vorhanden)
+                                let audioBuffer = null;
+                                if (trackData.audioBuffer) {
+                                    audioBuffer = audioContext.createBuffer(
+                                        trackData.audioBuffer.numberOfChannels,
+                                        trackData.audioBuffer.length,
+                                        trackData.audioBuffer.sampleRate
+                                    );
+                                    for (let i = 0; i < trackData.audioBuffer.numberOfChannels; i++) {
+                                        audioBuffer.getChannelData(i).set(trackData.audioBuffer.channelData[i]);
+                                    }
+                                }
+                                addMediaToTimeline(file, 'audio', audioBuffer, trackData);
+                            } else {
+                                addMediaToTimeline(file, trackData.type, null, trackData); // Kein AudioBuffer
+                            }
+                        });
+                });
+
+                // Warten, bis *alle* Spuren geladen wurden
+                Promise.all(loadPromises).then(() => {
+                    updateZoom(); // Zoom anpassen
+                    updateTrackControls();
+                    editorSection.style.display = 'block'; // Editor-Sektion anzeigen
+                    exportSection.style.display = 'block';
+                });
+              //Fehler fangen
+            } catch (error) {
+                console.error("Fehler beim Laden des Projekts:", error);
+                alert("Fehler beim Laden des Projekts. Die Datei ist möglicherweise beschädigt oder hat ein ungültiges Format.");
+            }
+        };
+        reader.readAsText(file); // JSON-Datei als Text lesen
+    }
+
+    // Hilfsfunktion: Timeline leeren, bevor ein neues Projekt geladen wird
+    function clearTimeline() {
+      //DOM-Elemente entfernen
+      audioTracksContainer.innerHTML = '';
+      videoTracksContainer.innerHTML = '';
+      imageTracksContainer.innerHTML = '';
+
+      // Wavesurfer-Instanzen zerstören
+      for(const trackId in wavesurferInstances){
+        if(wavesurferInstances.hasOwnProperty(trackId)){
+          wavesurferInstances[trackId].destroy();
+        }
+      }
+      wavesurferInstances = {};
+
+       // URLs freigeben (Speicherleck verhindern!)
+        for (const track of tracks) {
+            URL.revokeObjectURL(track.src);
+        }
+
+      tracks = []; //Leere Tracks
+      currentTrackId = 0; // ID zurücksetzen
+      selectedTracks = []; //Auswahl leeren
+    }
+
+    // Hilfsfunktion: Globale Einstellungen zurücksetzen
+    function resetGlobalSettings() {
+      concertPitch = 440;
+      concertPitchInput.value = concertPitch;
+      zoomLevel = 1;
+      snapToGridCheckbox.checked = false;
+      // ... (weitere Einstellungen) ...
+    }
+
+      // --- Teilen von Projekten ---
+    function shareProject() {
+       // Speichere das Projekt
+        const projectData = {
+            tracks: tracks.map(track => ({
+                type: track.type,
+                src: track.src,
+                startTime: track.startTime,
+                duration: track.duration,
+                effectValues: track.effectValues,
+                audioBuffer: track.type === 'audio' ? { // Speichere AudioBuffer-Daten *separat*
+                    numberOfChannels: track.audioBuffer.numberOfChannels,
+                    length: track.audioBuffer.length,
+                    sampleRate: track.audioBuffer.sampleRate,
+                    channelData: Array.from({ length: track.audioBuffer.numberOfChannels }, (_, i) => Array.from(track.audioBuffer.getChannelData(i))),
+                } : null, // Keine Audiodaten für Video/Bild
+                 muted: track.muted, //hinzugefügt
+                solo: track.solo, //hinzugefügt
+            })),
+            concertPitch: concertPitch,
+            zoomLevel: zoomLevel,
+            snapToGrid: snapToGrid,
+
+        };
+
+        const projectJson = JSON.stringify(projectData);
+
+        // Erstelle einen Blob aus den JSON-Daten.
+        const blob = new Blob([projectJson], { type: 'application/json' });
+
+        // Erstelle eine temporäre URL für den Blob.
+        const url = URL.createObjectURL(blob);
+
+        // Erstelle einen Link, der die URL als Parameter enthält.
+        const shareLink = window.location.origin + window.location.pathname + '?project=' + encodeURIComponent(url);
+
+        // Kopiere den Link in die Zwischenablage.
+        navigator.clipboard.writeText(shareLink).then(() => {
+            alert('Projekt-Link in die Zwischenablage kopiert. Teile diesen Link, um das Projekt zu laden.');
+        }).catch(err => {
+            console.error('Fehler beim Kopieren in die Zwischenablage:', err);
+             alert('Fehler beim Kopieren des Links. Bitte manuell kopieren.');
+        });
+
+       // URL.revokeObjectURL(url); // WICHTIG: URL wieder freigeben, nachdem der Link kopiert wurde!
+    }
+
+    // --- Laden von Projekten über URL-Parameter ---
+      function loadProjectFromUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectUrl = urlParams.get('project');
+
+        if (projectUrl) {
+          // Wenn ein Projektparameter vorhanden ist.
+            fetch(projectUrl) // URL abrufen (Cross-Origin beachten!)
+                .then(response => {
+                  if (!response.ok) {
+                   throw new Error(`HTTP-Fehlerstatus: ${response.status}`); // Fehler bei nicht erfolgreicher Antwort
+                  }
+                  return response.json();
+                })
+                .then(projectData => {
+                  //Verarbeite die Projektdaten, stelle Spuren wieder her usw.
+                    clearTimeline();
+                    resetGlobalSettings();
+
+                    concertPitch = projectData.concertPitch || 440;
+                    concertPitchInput.value = concertPitch;
+                    zoomLevel = projectData.zoomLevel || 1;
+                    snapToGridCheckbox.checked = projectData.snapToGrid || false;
+
+                    const loadPromises = projectData.tracks.map(trackData => {
+                        return getBlobFromUrl(trackData.src)
+                            .then(blob => {
+                                if (!blob) {
+                                    console.error("Blob konnte nicht wiederhergestellt werden:", trackData.src);
+                                     return;
+                                }
+                                const file = new File([blob], "media-file", { type: blob.type });
+                                if (trackData.type === 'audio') {
+                                    let audioBuffer = null;
+                                    if (trackData.audioBuffer) {
+                                        audioBuffer = audioContext.createBuffer(
+                                            trackData.audioBuffer.numberOfChannels,
+                                            trackData.audioBuffer.length,
+                                            trackData.audioBuffer.sampleRate
+                                        );
+                                        for (let i = 0; i < trackData.audioBuffer.numberOfChannels; i++) {
+                                            audioBuffer.getChannelData(i).set(trackData.audioBuffer.channelData[i]);
+                                        }
+                                    }
+                                     addMediaToTimeline(file, 'audio', audioBuffer, trackData);
+                                } else {
+                                    addMediaToTimeline(file, trackData.type, null, trackData); // Kein AudioBuffer
+                                }
+                            });
+                    });
+
+                    Promise.all(loadPromises).then(() => {
+                        updateZoom();
+                        updateTrackControls();
+                        editorSection.style.display = 'block';
+                        exportSection.style.display = 'block';
+                    });
+                })
+                .catch(error => {
+                    console.error("Fehler beim Laden des Projekts von URL:", error);
+                    alert("Fehler beim Laden des Projekts von der URL.");
+                });
+        }
+    }
+
+    // --- Initialisierung der Export-Optionen ---
+    function initializeExportOptions() {
+        // Auflösungen (Beispiele - anpassen!)
+        const resolutions = [
+            { width: 1280, height: 720, label: "720p (HD)" },
+            { width: 1920, height: 1080, label: "1080p (Full HD)" },
+            { width: 3840, height: 2160, label: "4K (Ultra HD)" },
+             { width: 640, height: 480, label: "640x480 (SD)" }, // Standard Definition
+            { width: 854, height: 480, label: "480p (SD)" },   // 16:9 SD
+        ];
+
+        // Framerates (Beispiele)
+        const framerates = [24, 30, 60, 29.97, 59.94];
+
+        // Audio-Bitrates (Beispiele)
+        const bitrates = [
+            { value: 128000, label: "128 kbps" },
+            { value: 192000, label: "192 kbps" },
+            { value: 320000, label: "320 kbps" },
+        ];
+
+        // Optionen zu den Select-Elementen hinzufügen
+        for (const res of resolutions) {
+            const option = document.createElement('option');
+            option.value = `${res.width}x${res.height}`;
+            option.textContent = `${res.label} (${res.width}x${res.height})`;
+            exportResolutionSelect.appendChild(option);
+        }
+
+        for (const fps of framerates) {
+            const option = document.createElement('option');
+            option.value = fps;
+            option.textContent = `${fps} fps`;
+            exportFramerateSelect.appendChild(option);
+        }
+        for (const rate of bitrates) {
+            const option = document.createElement('option');
+            option.value = rate.value;
+            option.textContent = `${rate.label}`;
+            exportAudioBitrateSelect.appendChild(option)
+        }
+    }
+});
 
