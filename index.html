@@ -10,7 +10,10 @@
     <script src="https://cdn.jsdelivr.net/npm/meyda@latest/dist/web/meyda.min.js"></script>
     <script src="https://unpkg.com/@tonaljs/tonal@4.13.0/browser/tonal.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
+     <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+
 </head>
 <body>
     <header>
@@ -97,33 +100,33 @@
 
             <div id="track-controls">
                 <h3>Spur-Einstellungen</h3>
-                <div class="track-settings">
-                    <label for="volume">Lautstärke:</label>
-                    <input type="range" id="volume" min="0" max="1" step="0.01" value="1">
+              <div class="track-settings">
+                <label for="volume">Lautstärke:</label>
+                <input type="range" id="volume" min="0" max="1" step="0.01" value="1">
+                </div>
+                 <div class="track-settings">
+                <label for="panning">Panning:</label>
+                <input type="range" id="panning" min="-1" max="1" step="0.01" value="0">
                 </div>
                 <div class="track-settings">
-                    <label for="panning">Panning:</label>
-                    <input type="range" id="panning" min="-1" max="1" step="0.01" value="0">
+                <label for="brightness">Helligkeit:</label>
+                <input type="range" id="brightness" min="0" max="2" step="0.01" value="1">
+                </div>
+                 <div class="track-settings">
+                <label for="contrast">Kontrast:</label>
+                <input type="range" id="contrast" min="0" max="2" step="0.01" value="1">
+                </div>
+                 <div class="track-settings">
+                <label for="saturation">Sättigung:</label>
+                <input type="range" id="saturation" min="0" max="2" step="0.01" value="1">
                 </div>
                 <div class="track-settings">
-                    <label for="brightness">Helligkeit:</label>
-                    <input type="range" id="brightness" min="0" max="2" step="0.01" value="1">
+                <label for="hue">Farbton:</label>
+                <input type="range" id="hue" min="0" max="360" step="1" value="0">
                 </div>
-                <div class="track-settings">
-                    <label for="contrast">Kontrast:</label>
-                    <input type="range" id="contrast" min="0" max="2" step="0.01" value="1">
-                </div>
-                <div class="track-settings">
-                    <label for="saturation">Sättigung:</label>
-                    <input type="range" id="saturation" min="0" max="2" step="0.01" value="1">
-                </div>
-                <div class="track-settings">
-                    <label for="hue">Farbton:</label>
-                    <input type="range" id="hue" min="0" max="360" step="1" value="0">
-                </div>
-                <div class="track-settings">
-                    <label for="transparency">Transparenz:</label>
-                    <input type="range" id="transparency" min="0" max="1" step="0.01" value="1">
+                  <div class="track-settings">
+                <label for="transparency">Transparenz:</label>
+                <input type="range" id="transparency" min="0" max="1" step="0.01" value="1">
                 </div>
                 <div class="track-settings">
                  <label for="filter-type">Filter Type:</label>
