@@ -10,10 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/meyda@latest/dist/web/meyda.min.js"></script>
     <script src="https://unpkg.com/@tonaljs/tonal@4.13.0/browser/tonal.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
-     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
     <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
-
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
 </head>
 <body>
     <header>
@@ -22,7 +21,7 @@
     </header>
 
     <main>
-      <section id="upload-section" style="display: none;">
+        <section id="upload-section" style="display: none;">
             <h2>Medien hochladen oder aufnehmen</h2>
             <div class="upload-buttons">
                 <input type="file" id="file-upload" accept="audio/*,video/*,image/*" multiple title="Dateien hochladen">
@@ -31,13 +30,14 @@
                 <button id="capture-photo" title="Foto aufnehmen">Foto aufnehmen</button>
             </div>
             <div id="upload-progress" style="display: none;">
-              <progress value="0" max="100"></progress>
-              <span></span>
+                <progress value="0" max="100"></progress>
+                <span></span>
             </div>
         </section>
 
         <section id="editor-section">
             <h2>Editor</h2>
+            <div id="ffmpeg-status">FFmpeg wird geladen...</div>
             <div class="toolbar">
                 <div>
                     <button id="zoom-in" title="Vergrößern (Plus/Mausrad)"> + </button>
@@ -166,7 +166,7 @@
     </main>
 
     <footer>
-        <p>&copy; 2025 Echoel - <a href="https://www.paypal.me/echoel" target="_blank" rel="noopener noreferrer">Donate via PayPal</a></p>
+        <p>&copy; 2024 Echoel - <a href="https://www.paypal.me/echoel" target="_blank" rel="noopener noreferrer">Donate via PayPal</a></p>
     </footer>
     <script src="script.js"></script>
 </body>
